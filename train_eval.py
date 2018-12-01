@@ -60,7 +60,6 @@ def evaluate(model, loader, id2token, teacher_forcing_ratio=0.0):
     """
     
     model.eval() 
-    criterion = nn.NLLLoss()
     total_loss = 0 
     reference_corpus = []
     hypothesis_corpus = [] 
