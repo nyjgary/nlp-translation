@@ -162,13 +162,87 @@ def inspect_model(model, id2token, data_split, train_loader_, dev_loader_, batch
             pass 
 
 
-def train_and_eval(model, full_loaders, fast_loaders, id2token, learning_rate, num_epochs, 
-                   print_intermediate, save_checkpoint, model_name, lazy_eval, lazy_train, inspect): 
+# def train_and_eval(model, full_loaders, fast_loaders, id2token, learning_rate, num_epochs, 
+#                    print_intermediate, save_checkpoint, model_name, lazy_eval, lazy_train, inspect): 
+    
+#     # UPDATED 11/27: Added options to lazy_eval (skip eval on training data), lazy_train (overfit on 1 mini-batch), 
+#     # and inspect (print sentences)
+#     # UPDATED 11/30: Take full_loaders and fast_loaders as local variables (in dict)
+    
+#     if lazy_train: 
+#         train_loader_ = fast_loaders['train'] 
+#         dev_loader_ = fast_loaders['dev']
+#     else: 
+#         train_loader_ = full_loaders['train']
+#         dev_loader_ = full_loaders['dev']      
+    
+#     # initialize optimizer and criterion 
+#     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+#     criterion = nn.NLLLoss(ignore_index=RESERVED_TOKENS['<PAD>'])
+#     results = [] 
+    
+#     # loop through train data in batches and train 
+#     for epoch in range(num_epochs): 
+#         train_loss = 0 
+#         for batch, (src_idxs, targ_idxs, src_lens, targ_lens) in enumerate(train_loader_):
+#             model.train()
+#             optimizer.zero_grad()
+#             final_outputs, hypotheses = model(src_idxs, targ_idxs, src_lens, targ_lens, teacher_forcing_ratio=0.5) 
+#             loss = criterion(final_outputs[1:].view(-1, model.decoder.targ_vocab_size), targ_idxs[:,1:].contiguous().view(-1))
+#             loss.backward()
+#             nn.utils.clip_grad_norm_(model.parameters(), max_norm=10)
+#             optimizer.step()
+            
+#             if batch % 100 == 0 or ((epoch==num_epochs-1) & (batch==len(train_loader_)-1)):
+#                 result = {} 
+#                 result['epoch'] = epoch + batch / len(train_loader_) 
+#                 result['val_loss'], result['val_bleu'], val_hypotheses = evaluate(
+#                     model, dev_loader_, id2token, teacher_forcing_ratio=1)
+#                 if lazy_eval: 
+#                     # eval on full train set is very expensive 
+#                     result['train_loss'], result['train_bleu'], train_hypotheses = 0, 0, None
+#                 else: 
+#                     result['train_loss'], result['train_bleu'], train_hypotheses = evaluate(
+#                         model, train_loader_, id2token, teacher_forcing_ratio=1)
+                
+#                 results.append(result)
+                
+#                 if print_intermediate: 
+#                     print('Epoch: {:.2f}, Train Loss: {:.2f}, Val Loss: {:.2f}, Train BLEU: {:.2f}, Val BLEU: {:.2f}'\
+#                           .format(result['epoch'], result['train_loss'], result['val_loss'], 
+#                                   result['train_bleu'], result['val_bleu']))
+                    
+#                 if inspect: 
+#                     inspect_model(model, id2token, 'train', train_loader_, dev_loader_)
+#                     inspect_model(model, id2token, 'val', train_loader_, dev_loader_)
+                    
+#                 if save_checkpoint: 
+#                     if result['val_loss'] == pd.DataFrame.from_dict(results)['val_loss'].min(): 
+#                         checkpoint_fp = 'model_checkpoints/{}.pth.tar'.format(model_name)
+#                         check_dir_exists(filename=checkpoint_fp)
+#                         torch.save(model.state_dict(), checkpoint_fp)
+                
+#     return results 
+
+
+def train_and_eval(model, full_loaders, fast_loaders, params, vocab, print_intermediate, save_checkpoint, lazy_eval, inspect,
+                   save_to_log, print_summary): 
     
     # UPDATED 11/27: Added options to lazy_eval (skip eval on training data), lazy_train (overfit on 1 mini-batch), 
     # and inspect (print sentences)
     # UPDATED 11/30: Take full_loaders and fast_loaders as local variables (in dict)
+    # UPDATED 12/1: Incorporate save_to_log and print_summary 
     
+    learning_rate = params['learning_rate'] 
+    id2token = vocab[params['targ_lang']]['id2token']
+    num_epochs = params['num_epochs']
+    teacher_forcing_ratio = params['teacher_forcing_ratio']
+    clip_grad_max_norm = params['clip_grad_max_norm']
+    model_name = params['model_name']
+    lazy_train = params['lazy_train']
+
+    start_time = time.time() 
+
     if lazy_train: 
         train_loader_ = fast_loaders['train'] 
         dev_loader_ = fast_loaders['dev']
@@ -187,10 +261,10 @@ def train_and_eval(model, full_loaders, fast_loaders, id2token, learning_rate, n
         for batch, (src_idxs, targ_idxs, src_lens, targ_lens) in enumerate(train_loader_):
             model.train()
             optimizer.zero_grad()
-            final_outputs, hypotheses = model(src_idxs, targ_idxs, src_lens, targ_lens, teacher_forcing_ratio=0.5) 
+            final_outputs, hypotheses = model(src_idxs, targ_idxs, src_lens, targ_lens, teacher_forcing_ratio=teacher_forcing_ratio) 
             loss = criterion(final_outputs[1:].view(-1, model.decoder.targ_vocab_size), targ_idxs[:,1:].contiguous().view(-1))
             loss.backward()
-            nn.utils.clip_grad_norm_(model.parameters(), max_norm=10)
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_grad_max_norm)
             optimizer.step()
             
             if batch % 100 == 0 or ((epoch==num_epochs-1) & (batch==len(train_loader_)-1)):
@@ -222,7 +296,18 @@ def train_and_eval(model, full_loaders, fast_loaders, id2token, learning_rate, n
                         check_dir_exists(filename=checkpoint_fp)
                         torch.save(model.state_dict(), checkpoint_fp)
                 
-    return results 
+        runtime = (time.time() - start_time) / 60 
+        dt_created = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    if save_to_log: 
+        append_to_log(params, results, runtime, model_name, dt_created)
+
+    if print_summary: 
+        print("Experiment completed in {} minutes with {:.2f} best validation loss and {:.2f} best validation BLEU.".format(
+            int(runtime), pd.DataFrame.from_dict(results)['val_loss'].min(), 
+            pd.DataFrame.from_dict(results)['val_bleu'].max()))
+
+    return model, results  
 
 
 def run_experiment(model_type, num_epochs=10, learning_rate=0.0005, num_layers=2, enc_hidden_dim=300, 
