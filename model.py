@@ -115,7 +115,7 @@ class DecoderRNN(nn.Module):
 		embedded = self.embedding(dec_input).view(1, batch_size, -1)
 		context = torch.cat([enc_outputs[:, -1, :self.enc_hidden_dim], 
 							 enc_outputs[:, 0, self.enc_hidden_dim:]], dim=1).unsqueeze(0)
-		concat = torch.cat([embedded, context], 2)
+		concat = torch.cat([embedded, context], 2).to(device)
 		output, hidden = self.gru(concat, dec_hidden)
 		output = self.softmax(self.out(output[0].to(device)))    
 		return output, hidden
