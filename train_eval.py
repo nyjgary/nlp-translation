@@ -397,7 +397,7 @@ def plot_single_learning_curve(results, figsize=(8, 5)):
     results_df = pd.DataFrame.from_dict(results)
     results_df = results_df.set_index('epoch')
     results_df.plot(figsize=figsize)
-    plt.ylabel('Validation Lossy')
+    plt.ylabel('Validation Loss')
     plt.xlabel('Epoch')
 
 

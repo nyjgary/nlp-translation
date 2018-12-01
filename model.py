@@ -88,6 +88,39 @@ class EncoderRNN(nn.Module):
 	def initHidden(self, batch_size):
 		return torch.zeros(2*self.num_layers, batch_size, self.enc_hidden_dim).to(device)
 	
+class DecoderSimpleRNN(nn.Module):
+
+	""" Vanilla decoder with GRU. No attention, final encoder hidden layer only passed into first time step of decoder.
+	""" 
+
+	def __init__(self, dec_hidden_dim, enc_hidden_dim, num_layers, targ_vocab_size, targ_max_sentence_len, pretrained_word2vec):
+		super(DecoderSimpleRNN, self).__init__()
+		self.dec_embed_dim = 300
+		self.dec_hidden_dim = dec_hidden_dim 
+		self.enc_hidden_dim = enc_hidden_dim
+		self.targ_vocab_size = targ_vocab_size
+		self.targ_max_sentence_len = targ_max_sentence_len
+		self.num_layers = num_layers
+		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True).to(device)
+#		self.gru = nn.GRU(self.dec_embed_dim + 2 * self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers).to(device)
+		self.gru = nn.GRU(self.dec_embed_dim, self.dec_hidden_dim, num_layers=self.num_layers).to(device)
+		self.out = nn.Linear(dec_hidden_dim, self.targ_vocab_size).to(device)
+		self.softmax = nn.LogSoftmax(dim=1).to(device)
+
+	def forward(self, dec_input, dec_hidden, enc_outputs): 
+		dec_input = dec_input.to(device)
+		dec_hidden = dec_hidden.to(device)
+		enc_outputs = enc_outputs.to(device)
+		batch_size = dec_input.size()[0]
+		embedded = self.embedding(dec_input).view(1, batch_size, -1)
+		# context = torch.cat([enc_outputs[:, -1, :self.enc_hidden_dim], 
+		# 					 enc_outputs[:, 0, self.enc_hidden_dim:]], dim=1).unsqueeze(0)
+		# concat = torch.cat([embedded, context], 2).to(device)
+		# output, hidden = self.gru(concat, dec_hidden)
+		output, hidden = self.gru(embedded, dec_hidden)
+		output = self.softmax(self.out(output[0].to(device)))    
+		return output, hidden
+		
 class DecoderRNN(nn.Module):
 
 	""" Vanilla decoder with GRU. 
@@ -119,7 +152,7 @@ class DecoderRNN(nn.Module):
 		output, hidden = self.gru(concat, dec_hidden)
 		output = self.softmax(self.out(output[0].to(device)))    
 		return output, hidden
-		
+
 class Attention(nn.Module): 
 	
 	""" Implements the attention mechanism by Bahdanau et al. (2015) """
