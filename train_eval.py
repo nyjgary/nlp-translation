@@ -380,7 +380,7 @@ def summarize_results(results_log):
     results_df = pd.DataFrame.from_dict(results_log)
     results_df = pd.concat([results_df, results_df['hyperparams'].apply(pd.Series)], axis=1)
     results_df['val_loss'] = results_df['results'].apply(lambda d: pd.DataFrame.from_dict(d)['val_loss'].min())
-    return results_df.sort_values(by='val_loss', ascending=True) 
+    return results_df.sort_values(by='dt_created', ascending=False) 
 
 def plot_multiple_learning_curves(results_df, plot_variable, figsize=(8, 5), legend_loc='best'):
     """ Plots learning curves of MULTIPLE experiments, includes only validation accuracy """
