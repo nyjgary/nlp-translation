@@ -103,9 +103,9 @@ class DecoderRNN(nn.Module):
 		self.targ_max_sentence_len = targ_max_sentence_len
 		self.num_layers = num_layers
 		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True).to(device)
-		self.gru = nn.GRU(self.dec_embed_dim + 2 * self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers)
-		self.out = nn.Linear(dec_hidden_dim, self.targ_vocab_size)
-		self.softmax = nn.LogSoftmax(dim=1)
+		self.gru = nn.GRU(self.dec_embed_dim + 2 * self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers).to(device)
+		self.out = nn.Linear(dec_hidden_dim, self.targ_vocab_size).to(device)
+		self.softmax = nn.LogSoftmax(dim=1).to(device)
 
 	def forward(self, dec_input, dec_hidden, enc_outputs): 
 		dec_input = dec_input.to(device)
