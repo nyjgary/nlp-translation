@@ -284,8 +284,8 @@ def evaluate_V2(model, loader, src_id2token, targ_id2token, teacher_forcing_rati
 #     return model, results  
 
 
-def train_and_eval_V3(model, loaders_full, loaders_lazy, loaders_10K, params, vocab, print_intermediate, save_checkpoint, 
-    save_to_log, print_summary, inspect_samples=None): 
+def train_and_eval_V3(model, loaders_full, loaders_minibatch, loaders_minitrain, params, vocab, print_intermediate, save_checkpoint, 
+    save_to_log, print_summary, lazy_eval, inspect_samples=None): 
     
     # UPDATED 11/27: Added options to lazy_eval (skip eval on training data), lazy_train (overfit on 1 mini-batch), 
     # and inspect (print sentences)
@@ -305,13 +305,13 @@ def train_and_eval_V3(model, loaders_full, loaders_lazy, loaders_10K, params, vo
 
     # if training on full training set, use 10K loader to minimize runtime on eval 
     if lazy_train: 
-        train_loader_ = loaders_lazy['train'] 
-        dev_loader_ = loaders_lazy['dev']
-        train_loader_to_eval = loaders_lazy['train']
+        train_loader_ = loaders_minibatch['train'] 
+        dev_loader_ = loaders_minibatch['dev']
+        train_loader_to_eval = loaders_minibatch['train']
     else: 
         train_loader_ = loaders_full['train']
         dev_loader_ = loaders_full['dev'] 
-        train_loader_to_eval = loaders_10K['train']
+        train_loader_to_eval = loaders_minitrain['train']
 
     # initialize optimizer and criterion 
     optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
@@ -336,13 +336,16 @@ def train_and_eval_V3(model, loaders_full, loaders_lazy, loaders_10K, params, vo
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_grad_max_norm)
             optimizer.step()
             
-            if batch % 100 == 0 or ((epoch==num_epochs-1) & (batch==len(train_loader_)-1)):
+            if batch % 1000 == 0 or ((epoch==num_epochs-1) & (batch==len(train_loader_)-1)):
                 result = {} 
                 result['epoch'] = epoch + batch / len(train_loader_) 
                 result['val_loss'], result['val_bleu'], val_hyp_idxs, val_ref_idxs, val_source_idxs, val_hyp_tokens, val_ref_tokens, val_source_tokens, val_probs = \
                     evaluate_V2(model, dev_loader_, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
-                result['train_loss'], result['train_bleu'], train_hyp_idxs, train_ref_idxs, train_source_idxs, train_hyp_tokens, train_ref_tokens, train_source_tokens, train_probs = \
-                        evaluate_V2(model, train_loader_to_eval, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
+                if not lazy_eval: 
+                    result['train_loss'], result['train_bleu'], train_hyp_idxs, train_ref_idxs, train_source_idxs, train_hyp_tokens, train_ref_tokens, train_source_tokens, train_probs = \
+                            evaluate_V2(model, train_loader_to_eval, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
+                else: 
+                    result['train_loss'], result['train_bleu'] = 0, 0 
                 results.append(result)
                 
                 if print_intermediate: 
@@ -352,9 +355,10 @@ def train_and_eval_V3(model, loaders_full, loaders_lazy, loaders_10K, params, vo
                     
                 if inspect_samples is not None: 
                     # sample predictions from training set, if available 
-                    print("Sampling from training predictions...")
-                    sample_predictions(train_hyp_idxs, train_ref_idxs, train_source_idxs, 
-                        train_hyp_tokens, train_ref_tokens, train_source_tokens, train_probs, targ_id2token, num_samples=inspect_samples)
+                    if not lazy_eval: 
+                        print("Sampling from training predictions...")
+                        sample_predictions(train_hyp_idxs, train_ref_idxs, train_source_idxs, 
+                            train_hyp_tokens, train_ref_tokens, train_source_tokens, train_probs, targ_id2token, num_samples=inspect_samples)
                     # sample predictions from validation set 
                     print("Sampling from val predictions...")
                     sample_predictions(val_hyp_idxs, val_ref_idxs, val_source_idxs, 
