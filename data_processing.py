@@ -55,7 +55,7 @@ def build_vocab(token_lists, max_vocab_size, word2vec):
     all_tokens = [token for sublist in token_lists for token in sublist]
     token_counter = Counter(all_tokens)
     vocab, count = zip(*token_counter.most_common(num_vocab))
-    id2token = list(RESERVED_TOKENS.keys()) + list(vocab)
+    id2token = sorted(RESERVED_TOKENS, key=RESERVED_TOKENS.get) + list(vocab)
     token2id = dict(zip(id2token, range(max_vocab_size)))
     
     # check out how many words are in word2vec vs. not 
