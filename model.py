@@ -123,16 +123,18 @@ class EncoderSimpleRNN(nn.Module):
 		output, _ = torch.nn.utils.rnn.pad_packed_sequence(output, batch_first=True, 
 														   total_length=self.src_max_sentence_len,
 														   padding_value=RESERVED_TOKENS['<PAD>'])
+#		print("Output size after GRU: {}".format(output.size()))
 		output = output.index_select(0, idx_unsort)
 		hidden = hidden.index_select(1, idx_unsort)
 #		print("Hidden size after unsorting: {}".format(hidden.size()))
-
+#		print("Output size after unsorting: {}".format(output.size()))
 		output = output[:, :, :self.enc_hidden_dim] + output[:, :, self.enc_hidden_dim:]
+#		print("Output size after summing: {}".format(output.size()))		
 		hidden = hidden.view(self.num_layers, 2, batch_size, self.enc_hidden_dim)
 #		print("Hidden size after viewing: {}".format(hidden.size()))
 		hidden = hidden[:, 0, :, :].squeeze(dim=1) + hidden[:, 1, :, :].squeeze(dim=1)
 #		print("Hidden size after summing and squeezing: {}".format(hidden.size()))
-#		print("output shape: {} | hidden shape: {}".format(output.size(), hidden.size()))
+#		print("From SimpleEncoder we have output shape = {} and hidden shape = {}".format(output.size(), hidden.size()))
 		return output, hidden
 
 	def initHidden(self, batch_size):
@@ -203,6 +205,48 @@ class DecoderRNN(nn.Module):
 		context = torch.cat([enc_outputs[:, -1, :self.enc_hidden_dim], 
 							 enc_outputs[:, 0, self.enc_hidden_dim:]], dim=1).unsqueeze(0)
 		concat = torch.cat([embedded, context], 2).to(device)
+		output, hidden = self.gru(concat, dec_hidden)
+		output = self.softmax(self.out(output[0].to(device)))    
+		return output, hidden
+
+class DecoderRNNV2(nn.Module):
+
+	""" Vanilla decoder with GRU. 
+		No attention, but the final hidden layer from encoder is repeatedly passed as input to each time step. 
+		V2 = that layer passed is summed rather than concat  
+	""" 
+
+	def __init__(self, dec_hidden_dim, enc_hidden_dim, num_layers, targ_vocab_size, targ_max_sentence_len, pretrained_word2vec):
+		super(DecoderRNNV2, self).__init__()
+		self.dec_embed_dim = 300
+		self.dec_hidden_dim = dec_hidden_dim 
+		self.enc_hidden_dim = enc_hidden_dim
+		self.targ_vocab_size = targ_vocab_size
+		self.targ_max_sentence_len = targ_max_sentence_len
+		self.num_layers = num_layers
+		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True).to(device)
+		self.gru = nn.GRU(self.dec_embed_dim + self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers).to(device)
+		self.out = nn.Linear(dec_hidden_dim, self.targ_vocab_size).to(device)
+		self.softmax = nn.LogSoftmax(dim=1).to(device)
+
+	def forward(self, dec_input, dec_hidden, enc_outputs): 
+		dec_input = dec_input.to(device)
+		dec_hidden = dec_hidden.to(device)
+		enc_outputs = enc_outputs.to(device)
+#		print("Encoder output size received by decoder: {}".format(enc_outputs.size()))
+		batch_size = dec_input.size()[0]
+		embedded = self.embedding(dec_input).view(1, batch_size, -1)	
+		# print("First part of context: {}".format(enc_outputs[:, -1, :self.enc_hidden_dim].size()))	
+		# print("Second part of context: {}".format(enc_outputs[:, 0, self.enc_hidden_dim:].size()))
+		# print("After Cat before unsqueezing: {}".format(torch.cat([enc_outputs[:, -1, :self.enc_hidden_dim], 
+		# 	enc_outputs[:, 0, self.enc_hidden_dim:]], dim=1).size()))
+		# context = torch.cat([enc_outputs[:, -1, :self.enc_hidden_dim], 
+		# 					 enc_outputs[:, 0, self.enc_hidden_dim:]], dim=1).unsqueeze(0)
+		# print("Context size after manipulation: {}".format(context.size()))
+		context = enc_outputs[:, -1, :].unsqueeze(dim=1).transpose(0, 1) 
+#		print("New context size: {}".format(context.size()))		
+		concat = torch.cat([embedded, context], 2).to(device)
+#		print("Concat size: {}".format(concat.size()))		
 		output, hidden = self.gru(concat, dec_hidden)
 		output = self.softmax(self.out(output[0].to(device)))    
 		return output, hidden
