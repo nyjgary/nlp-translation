@@ -40,9 +40,13 @@ class EncoderDecoder(nn.Module):
 		batch_size = src_idx.size()[0]
 		enc_outputs, enc_hidden = self.encoder(src_idx, src_lens)
 		dec_hidden = enc_hidden 
+#		print("dec_hidden size after inheriting from enc_hidden: {}".format(dec_hidden.size()))
+#		print("dec_hidden: {} | size: {}".format(dec_hidden.size(), dec_hidden.size()))
 		dec_outputs = Variable(torch.zeros(self.targ_max_sentence_len, batch_size, self.targ_vocab_size))
 		hypotheses = Variable(torch.zeros(self.targ_max_sentence_len, batch_size))
+#		print("targ_idx: {} | size: {}".format(targ_idx, targ_idx.size()))
 		dec_output = targ_idx[:, 0] # initialize with <SOS>
+#		print("dec_output: {} | size: {}".format(dec_output, dec_output.size()))
 		for di in range(1, self.targ_max_sentence_len): 
 			dec_output, dec_hidden = self.decoder(dec_output, dec_hidden, enc_outputs)
 			dec_outputs[di] = dec_output 
@@ -83,12 +87,58 @@ class EncoderRNN(nn.Module):
 														   padding_value=RESERVED_TOKENS['<PAD>'])
 		output = output.index_select(0, idx_unsort)
 		hidden = hidden.index_select(1, idx_unsort).transpose(0, 1).contiguous().view(self.num_layers, batch_size, -1)
+		print("output shape: {} | hidden shape: {}".format(output.size(), hidden.size()))
 		return output, hidden
 
 	def initHidden(self, batch_size):
 		return torch.zeros(2*self.num_layers, batch_size, self.enc_hidden_dim).to(device)
 	
+class EncoderSimpleRNN(nn.Module):
+
+	""" Vanilla encoder with GRU """ 
 	
+	def __init__(self, enc_hidden_dim, num_layers, src_max_sentence_len, pretrained_word2vec):
+		super(EncoderSimpleRNN, self).__init__()
+		self.enc_embed_dim = 300
+		self.enc_hidden_dim = enc_hidden_dim 
+		self.src_max_sentence_len = src_max_sentence_len
+		self.num_layers = num_layers
+		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True).to(device)
+		self.gru = nn.GRU(input_size=self.enc_embed_dim, hidden_size=self.enc_hidden_dim, num_layers=self.num_layers, 
+						  batch_first=True, bidirectional=True).to(device)
+	
+	def forward(self, enc_input, enc_input_lens):
+		enc_input = enc_input.to(device)
+		enc_input_lens = enc_input_lens.to(device)
+		batch_size = enc_input.size()[0]
+		_, idx_sort = torch.sort(enc_input_lens, dim=0, descending=True)
+		_, idx_unsort = torch.sort(idx_sort, dim=0)
+		enc_input, enc_input_lens = enc_input.index_select(0, idx_sort), enc_input_lens.index_select(0, idx_sort)
+		embedded = self.embedding(enc_input)
+		embedded = torch.nn.utils.rnn.pack_padded_sequence(embedded, enc_input_lens, batch_first=True)
+		hidden = self.initHidden(batch_size).to(device)
+#		print("Hidden size after initializing: {}".format(hidden.size()))
+		output, hidden = self.gru(embedded, hidden)
+#		print("Hidden size after GRU: {}".format(hidden.size()))
+		output, _ = torch.nn.utils.rnn.pad_packed_sequence(output, batch_first=True, 
+														   total_length=self.src_max_sentence_len,
+														   padding_value=RESERVED_TOKENS['<PAD>'])
+		output = output.index_select(0, idx_unsort)
+		hidden = hidden.index_select(1, idx_unsort)
+#		print("Hidden size after unsorting: {}".format(hidden.size()))
+
+		output = output[:, :, :self.enc_hidden_dim] + output[:, :, self.enc_hidden_dim:]
+		hidden = hidden.view(self.num_layers, 2, batch_size, self.enc_hidden_dim)
+#		print("Hidden size after viewing: {}".format(hidden.size()))
+		hidden = hidden[:, 0, :, :].squeeze(dim=1) + hidden[:, 1, :, :].squeeze(dim=1)
+#		print("Hidden size after summing and squeezing: {}".format(hidden.size()))
+#		print("output shape: {} | hidden shape: {}".format(output.size(), hidden.size()))
+		return output, hidden
+
+	def initHidden(self, batch_size):
+		return torch.zeros(2*self.num_layers, batch_size, self.enc_hidden_dim).to(device)
+
+
 class DecoderSimpleRNN(nn.Module):
 
 	""" Vanilla decoder with GRU. No attention, final encoder hidden layer only passed into first time step of decoder.
@@ -114,11 +164,14 @@ class DecoderSimpleRNN(nn.Module):
 		enc_outputs = enc_outputs.to(device)
 		batch_size = dec_input.size()[0]
 		embedded = self.embedding(dec_input).view(1, batch_size, -1)
+		dec_hidden = dec_hidden.view(-1, batch_size, self.dec_hidden_dim)
 		# context = torch.cat([enc_outputs[:, -1, :self.enc_hidden_dim], 
 		# 					 enc_outputs[:, 0, self.enc_hidden_dim:]], dim=1).unsqueeze(0)
 		# concat = torch.cat([embedded, context], 2).to(device)
 		# output, hidden = self.gru(concat, dec_hidden)
+#		print("dec_hidden size before going into GRU: {}".format(dec_hidden.size()))
 		output, hidden = self.gru(embedded, dec_hidden)
+#		print("After GRU, output size is {} and hidden size is {}".format(output.size(), hidden.size()))
 		output = self.softmax(self.out(output[0].to(device)))    
 		return output, hidden
 		

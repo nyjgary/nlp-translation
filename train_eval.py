@@ -146,6 +146,7 @@ def evaluate_V2(model, loader, src_id2token, targ_id2token, teacher_forcing_rati
         outputs, hypotheses = model(src_idxs, targ_idxs, src_lens, targ_lens, 
                                     teacher_forcing_ratio=teacher_forcing_ratio)
         outputs = outputs[1:].view(-1, model.decoder.targ_vocab_size)
+#        print(F.softmax(outputs)) 
         targets = targ_idxs[:,1:]
         hypothesis_corpus.append(hypotheses)
         reference_corpus.append(targets)
