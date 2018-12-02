@@ -130,7 +130,7 @@ def calc_corpus_bleu(ref_list, hyp_list):
     avg_bleu = total_bleu / len(ref_list)
     return avg_bleu 
 
-def evaluate_V2(model, loader, id2token, teacher_forcing_ratio=0.0): 
+def evaluate_V2(model, loader, src_id2token, targ_id2token, teacher_forcing_ratio=0.0): 
     """ Evaluates a model given a loader and id2token 
         Returns avg_loss, avg_bleu, ref_list, and hyp_list 
     """
@@ -139,6 +139,7 @@ def evaluate_V2(model, loader, id2token, teacher_forcing_ratio=0.0):
     total_loss = 0 
     reference_corpus = []
     hypothesis_corpus = [] 
+    source_corpus = [] 
     
     for i, (src_idxs, targ_idxs, src_lens, targ_lens) in enumerate(loader): 
         batch_size = src_idxs.size()[0]        
@@ -148,6 +149,7 @@ def evaluate_V2(model, loader, id2token, teacher_forcing_ratio=0.0):
         targets = targ_idxs[:,1:]
         hypothesis_corpus.append(hypotheses)
         reference_corpus.append(targets)
+        source_corpus.append(src_idxs)
  
         loss = F.nll_loss(outputs.view(-1, model.decoder.targ_vocab_size), targets.contiguous().view(-1), 
                           ignore_index=RESERVED_TOKENS['<PAD>'])
@@ -158,11 +160,14 @@ def evaluate_V2(model, loader, id2token, teacher_forcing_ratio=0.0):
     # reconstruct corpus and compute bleu score 
     hyp_idxs = torch.cat(hypothesis_corpus, dim=0) 
     ref_idxs = torch.cat(reference_corpus, dim=0)
-    hyp_tokens = tensor2corpus_V2(hyp_idxs, id2token)
-    ref_tokens = tensor2corpus_V2(ref_idxs, id2token)
+    source_idxs = torch.cat(source_corpus, dim=0)
+    hyp_tokens = tensor2corpus_V2(hyp_idxs, targ_id2token)
+    ref_tokens = tensor2corpus_V2(ref_idxs, targ_id2token)
+    source_tokens = tensor2corpus_V2(source_idxs, src_id2token)
+
     avg_bleu = calc_corpus_bleu(ref_tokens, hyp_tokens)
     
-    return avg_loss, avg_bleu, hyp_idxs, ref_idxs, hyp_tokens, ref_tokens
+    return avg_loss, avg_bleu, hyp_idxs, ref_idxs, source_idxs, hyp_tokens, ref_tokens, source_tokens 
 
 
 def train_and_eval_V2(model, full_loaders, fast_loaders, params, vocab, print_intermediate, save_checkpoint, 
@@ -174,7 +179,8 @@ def train_and_eval_V2(model, full_loaders, fast_loaders, params, vocab, print_in
     # UPDATED 12/1: Incorporate save_to_log and print_summary 
     
     learning_rate = params['learning_rate'] 
-    id2token = vocab[params['targ_lang']]['id2token']
+    targ_id2token = vocab[params['targ_lang']]['id2token']
+    src_id2token = vocab[params['src_lang']]['id2token']
     num_epochs = params['num_epochs']
     teacher_forcing_ratio = params['teacher_forcing_ratio']
     clip_grad_max_norm = params['clip_grad_max_norm']
@@ -210,14 +216,14 @@ def train_and_eval_V2(model, full_loaders, fast_loaders, params, vocab, print_in
             if batch % 100 == 0 or ((epoch==num_epochs-1) & (batch==len(train_loader_)-1)):
                 result = {} 
                 result['epoch'] = epoch + batch / len(train_loader_) 
-                result['val_loss'], result['val_bleu'], val_hyp_idxs, val_ref_idxs, val_hyp_tokens, val_ref_tokens = \
-                    evaluate_V2(model, dev_loader_, id2token, teacher_forcing_ratio=1)
+                result['val_loss'], result['val_bleu'], val_hyp_idxs, val_ref_idxs, val_source_idxs, val_hyp_tokens, val_ref_tokens, val_source_tokens = \
+                    evaluate_V2(model, dev_loader_, src_id2token, targ_id2token, teacher_forcing_ratio=1)
                 if lazy_eval: 
                     # eval on full train set is very expensive 
                     result['train_loss'], result['train_bleu'] = 0, 0
                 else: 
-                    result['train_loss'], result['train_bleu'], train_hyp_idxs, train_ref_idxs, train_hyp_tokens, train_ref_tokens = \
-                        evaluate_V2(model, train_loader_, id2token, teacher_forcing_ratio=1)
+                    result['train_loss'], result['train_bleu'], train_hyp_idxs, train_ref_idxs, train_source_idxs, train_hyp_tokens, train_ref_tokens, train_source_tokens = \
+                        evaluate_V2(model, train_loader_, src_id2token, targ_id2token, teacher_forcing_ratio=1)
                 
                 results.append(result)
                 
@@ -230,10 +236,12 @@ def train_and_eval_V2(model, full_loaders, fast_loaders, params, vocab, print_in
                     # sample predictions from training set, if available 
                     if not lazy_eval: 
                         print("Sampling from training predictions...")
-                        sample_predictions(train_hyp_idxs, train_ref_idxs, train_hyp_tokens, train_ref_tokens, id2token, num_samples=1)
+                        sample_predictions(train_hyp_idxs, train_ref_idxs, train_source_idxs, 
+                            train_hyp_tokens, train_ref_tokens, train_source_tokens, num_samples=1)
                     # sample predictions from validation set 
                     print("Sampling from val predictions...")
-                    sample_predictions(val_hyp_idxs, val_ref_idxs, val_hyp_tokens, val_ref_tokens, id2token, num_samples=1)
+                    sample_predictions(val_hyp_idxs, val_ref_idxs, val_source_idxs, 
+                        val_hyp_tokens, val_ref_tokens, val_source_tokens, num_samples=1)
                     
                 if save_checkpoint: 
                     if result['val_loss'] == pd.DataFrame.from_dict(results)['val_loss'].min(): 
@@ -254,14 +262,17 @@ def train_and_eval_V2(model, full_loaders, fast_loaders, params, vocab, print_in
 
     return model, results  
 
-def sample_predictions(hyp_idxs, ref_idxs, hyp_tokens, ref_tokens, id2token, num_samples=1): 
+def sample_predictions(hyp_idxs, ref_idxs, source_idxs, hyp_tokens, ref_tokens, source_tokens, num_samples=1): 
+
     # NEW 11/27 
     """ Randomly samples num_samples to print """
     
     for i in range(num_samples): 
         rand = random.randint(0, len(hyp_idxs)-1) 
+        source = ' '.join(source_tokens[rand])
         reference_translation = ' '.join(ref_tokens[rand]) 
         model_translation = ' '.join(hyp_tokens[rand])
+        print("Source: {}".format(source))
         print("Reference: {}".format(reference_translation))
         print("Model: {}".format(model_translation))
         print()
