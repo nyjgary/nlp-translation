@@ -88,6 +88,7 @@ class EncoderRNN(nn.Module):
 	def initHidden(self, batch_size):
 		return torch.zeros(2*self.num_layers, batch_size, self.enc_hidden_dim).to(device)
 	
+	
 class DecoderSimpleRNN(nn.Module):
 
 	""" Vanilla decoder with GRU. No attention, final encoder hidden layer only passed into first time step of decoder.

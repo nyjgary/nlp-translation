@@ -130,7 +130,7 @@ def calc_corpus_bleu(ref_list, hyp_list):
     avg_bleu = total_bleu / len(ref_list)
     return avg_bleu 
 
-def evaluate_V2(model, loader, src_id2token, targ_id2token, teacher_forcing_ratio=0.0): 
+def evaluate_V2(model, loader, src_id2token, targ_id2token, teacher_forcing_ratio): 
     """ Evaluates a model given a loader and id2token 
         Returns avg_loss, avg_bleu, ref_list, and hyp_list 
     """
@@ -217,13 +217,13 @@ def train_and_eval_V2(model, full_loaders, fast_loaders, params, vocab, print_in
                 result = {} 
                 result['epoch'] = epoch + batch / len(train_loader_) 
                 result['val_loss'], result['val_bleu'], val_hyp_idxs, val_ref_idxs, val_source_idxs, val_hyp_tokens, val_ref_tokens, val_source_tokens = \
-                    evaluate_V2(model, dev_loader_, src_id2token, targ_id2token, teacher_forcing_ratio=1)
+                    evaluate_V2(model, dev_loader_, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
                 if lazy_eval: 
                     # eval on full train set is very expensive 
                     result['train_loss'], result['train_bleu'] = 0, 0
                 else: 
                     result['train_loss'], result['train_bleu'], train_hyp_idxs, train_ref_idxs, train_source_idxs, train_hyp_tokens, train_ref_tokens, train_source_tokens = \
-                        evaluate_V2(model, train_loader_, src_id2token, targ_id2token, teacher_forcing_ratio=1)
+                        evaluate_V2(model, train_loader_, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
                 
                 results.append(result)
                 
