@@ -86,6 +86,186 @@ def evaluate(model, loader, id2token, teacher_forcing_ratio=0.0):
     
     return total_loss / len(loader), bleu_score, hypothesis_corpus
 
+def filter_reserved_tokens(sentence_as_list): 
+    """ Drops everything after <EOS> and removes <SOS>, <EOS>, and <PAD> before computing bleu score """ 
+    
+    # drops everything after <EOS> 
+    try: 
+        output = sentence_as_list[:sentence_as_list.index('<EOS>')]
+    except: 
+        output = sentence_as_list
+
+    # drops <SOS>, <EOS>, <PAD>  
+    output = ' '.join([idx for idx in output if idx not in ['<SOS>', '<EOS>', '<PAD>']]) 
+
+    return output 
+
+def tensor2corpus_V2(tensor, id2token):  
+    """ Takes a tensor of sentences (num_sentences x max_sentence_length), returns its string equivalent """    
+    
+    list_of_lists = tensor.numpy().astype(int).tolist()
+    to_token = lambda l: [id2token[idx] for idx in l]
+    corpus = [to_token(l) for l in list_of_lists] 
+ 
+    return corpus
+
+def calc_sentence_bleu(ref_sent, hyp_sent): 
+    """ Takes a reference sentence and hypothesis sentence and returns their bleu score """
+
+    # filters out reserved tokens 
+    ref_sent, hyp_sent = filter_reserved_tokens(ref_sent), filter_reserved_tokens(hyp_sent)
+    
+    # compute bleu score 
+    sentence_bleu = sacrebleu.sentence_bleu(hyp_sent, ref_sent)
+    return sentence_bleu 
+
+def calc_corpus_bleu(ref_list, hyp_list): 
+    """ Takes two lists representing reference sentences and hypothesis sentences, compute Bleu score as 
+        the average bleu score of all the sentences in the corpus 
+    """ 
+
+    total_bleu = 0 
+    for ref_sent, hyp_sent in zip(ref_list, hyp_list): 
+        total_bleu = total_bleu + calc_sentence_bleu(ref_sent, hyp_sent)
+    avg_bleu = total_bleu / len(ref_list)
+    return avg_bleu 
+
+def evaluate_V2(model, loader, id2token, teacher_forcing_ratio=0.0): 
+    """ Evaluates a model given a loader and id2token 
+        Returns avg_loss, avg_bleu, ref_list, and hyp_list 
+    """
+    
+    model.eval() 
+    total_loss = 0 
+    reference_corpus = []
+    hypothesis_corpus = [] 
+    
+    for i, (src_idxs, targ_idxs, src_lens, targ_lens) in enumerate(loader): 
+        batch_size = src_idxs.size()[0]        
+        outputs, hypotheses = model(src_idxs, targ_idxs, src_lens, targ_lens, 
+                                    teacher_forcing_ratio=teacher_forcing_ratio)
+        outputs = outputs[1:].view(-1, model.decoder.targ_vocab_size)
+        targets = targ_idxs[:,1:]
+        hypothesis_corpus.append(hypotheses)
+        reference_corpus.append(targets)
+ 
+        loss = F.nll_loss(outputs.view(-1, model.decoder.targ_vocab_size), targets.contiguous().view(-1), 
+                          ignore_index=RESERVED_TOKENS['<PAD>'])
+        total_loss += loss.item()  
+
+    avg_loss = total_loss / len(loader)
+
+    # reconstruct corpus and compute bleu score 
+    hyp_idxs = torch.cat(hypothesis_corpus, dim=0) 
+    ref_idxs = torch.cat(reference_corpus, dim=0)
+    hyp_tokens = tensor2corpus_V2(hyp_idxs, id2token)
+    ref_tokens = tensor2corpus_V2(ref_idxs, id2token)
+    avg_bleu = calc_corpus_bleu(ref_tokens, hyp_tokens)
+    
+    return avg_loss, avg_bleu, hyp_idxs, ref_idxs, hyp_tokens, ref_tokens
+
+
+def train_and_eval_V2(model, full_loaders, fast_loaders, params, vocab, print_intermediate, save_checkpoint, 
+    lazy_eval, inspect_iter, save_to_log, print_summary): 
+    
+    # UPDATED 11/27: Added options to lazy_eval (skip eval on training data), lazy_train (overfit on 1 mini-batch), 
+    # and inspect (print sentences)
+    # UPDATED 11/30: Take full_loaders and fast_loaders as local variables (in dict)
+    # UPDATED 12/1: Incorporate save_to_log and print_summary 
+    
+    learning_rate = params['learning_rate'] 
+    id2token = vocab[params['targ_lang']]['id2token']
+    num_epochs = params['num_epochs']
+    teacher_forcing_ratio = params['teacher_forcing_ratio']
+    clip_grad_max_norm = params['clip_grad_max_norm']
+    model_name = params['model_name']
+    lazy_train = params['lazy_train']
+
+    start_time = time.time() 
+
+    if lazy_train: 
+        train_loader_ = fast_loaders['train'] 
+        dev_loader_ = fast_loaders['dev']
+    else: 
+        train_loader_ = full_loaders['train']
+        dev_loader_ = full_loaders['dev']      
+    
+    # initialize optimizer and criterion 
+    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    criterion = nn.NLLLoss(ignore_index=RESERVED_TOKENS['<PAD>'])
+    results = [] 
+    
+    # loop through train data in batches and train 
+    for epoch in range(num_epochs): 
+        train_loss = 0 
+        for batch, (src_idxs, targ_idxs, src_lens, targ_lens) in enumerate(train_loader_):
+            model.train()
+            optimizer.zero_grad()
+            final_outputs, hypotheses = model(src_idxs, targ_idxs, src_lens, targ_lens, teacher_forcing_ratio=teacher_forcing_ratio) 
+            loss = criterion(final_outputs[1:].view(-1, model.decoder.targ_vocab_size), targ_idxs[:,1:].contiguous().view(-1))
+            loss.backward()
+            nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_grad_max_norm)
+            optimizer.step()
+            
+            if batch % 100 == 0 or ((epoch==num_epochs-1) & (batch==len(train_loader_)-1)):
+                result = {} 
+                result['epoch'] = epoch + batch / len(train_loader_) 
+                result['val_loss'], result['val_bleu'], val_hyp_idxs, val_ref_idxs, val_hyp_tokens, val_ref_tokens = \
+                    evaluate_V2(model, dev_loader_, id2token, teacher_forcing_ratio=1)
+                if lazy_eval: 
+                    # eval on full train set is very expensive 
+                    result['train_loss'], result['train_bleu'] = 0, 0
+                else: 
+                    result['train_loss'], result['train_bleu'], train_hyp_idxs, train_ref_idxs, train_hyp_tokens, train_ref_tokens = \
+                        evaluate_V2(model, train_loader_, id2token, teacher_forcing_ratio=1)
+                
+                results.append(result)
+                
+                if print_intermediate: 
+                    print('Epoch: {:.2f}, Train Loss: {:.2f}, Val Loss: {:.2f}, Train BLEU: {:.2f}, Val BLEU: {:.2f}'\
+                          .format(result['epoch'], result['train_loss'], result['val_loss'], 
+                                  result['train_bleu'], result['val_bleu']))
+                    
+                if batch % inspect_iter == 0 or ((epoch==num_epochs-1) & (batch==len(train_loader_)-1)): 
+                    # sample predictions from training set, if available 
+                    if not lazy_eval: 
+                        print("Sampling from training predictions...")
+                        sample_predictions(train_hyp_idxs, train_ref_idxs, train_hyp_tokens, train_ref_tokens, id2token, num_samples=1)
+                    # sample predictions from validation set 
+                    print("Sampling from val predictions...")
+                    sample_predictions(val_hyp_idxs, val_ref_idxs, val_hyp_tokens, val_ref_tokens, id2token, num_samples=1)
+                    
+                if save_checkpoint: 
+                    if result['val_loss'] == pd.DataFrame.from_dict(results)['val_loss'].min(): 
+                        checkpoint_fp = 'model_checkpoints/{}.pth.tar'.format(model_name)
+                        check_dir_exists(filename=checkpoint_fp)
+                        torch.save(model.state_dict(), checkpoint_fp)
+                
+        runtime = (time.time() - start_time) / 60 
+        dt_created = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    if save_to_log: 
+        append_to_log(params, results, runtime, model_name, dt_created)
+
+    if print_summary: 
+        print("Experiment completed in {} minutes with {:.2f} best validation loss and {:.2f} best validation BLEU.".format(
+            int(runtime), pd.DataFrame.from_dict(results)['val_loss'].min(), 
+            pd.DataFrame.from_dict(results)['val_bleu'].max()))
+
+    return model, results  
+
+def sample_predictions(hyp_idxs, ref_idxs, hyp_tokens, ref_tokens, id2token, num_samples=1): 
+    # NEW 11/27 
+    """ Randomly samples num_samples to print """
+    
+    for i in range(num_samples): 
+        rand = random.randint(0, len(hyp_idxs)-1) 
+        reference_translation = ' '.join(ref_tokens[rand]) 
+        model_translation = ' '.join(hyp_tokens[rand])
+        print("Reference: {}".format(reference_translation))
+        print("Model: {}".format(model_translation))
+        print()
+
 # helper functions to save results to and load results from a pkl logfile 
 
 RESULTS_LOG = 'experiment_results/experiment_results_log.pkl'

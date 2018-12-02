@@ -208,3 +208,5 @@ class DecoderAttnRNN(nn.Module):
 		output, hidden = self.gru(concat, dec_hidden)
 		output = self.softmax(self.out(output[0].to(device)))    
 		return output, hidden
+
+
