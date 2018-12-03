@@ -140,7 +140,7 @@ def evaluate_V2(model, loader, src_id2token, targ_id2token, teacher_forcing_rati
     reference_corpus = []
     hypothesis_corpus = [] 
     source_corpus = [] 
-    prob_corpus = [] 
+#    prob_corpus = [] 
     
     for i, (src_idxs, targ_idxs, src_lens, targ_lens) in enumerate(loader): 
         batch_size = src_idxs.size()[0]        
@@ -161,7 +161,7 @@ def evaluate_V2(model, loader, src_id2token, targ_id2token, teacher_forcing_rati
         reference_corpus.append(targets)
         source_corpus.append(src_idxs)
 #        print("For every batch, the probs generated have size {}".format(F.softmax(outputs).size()))
-        prob_corpus.append(F.softmax(outputs, dim=2))
+#        prob_corpus.append(F.softmax(outputs, dim=2))
         # print("Fed into NLL loss are viewed outputs size {} and viewed targets size {}".format(
         #     outputs.view(-1, model.decoder.targ_vocab_size).size(), targets.contiguous().view(-1).size()))
         # loss = F.nll_loss(outputs.view(-1, model.decoder.targ_vocab_size), targets.contiguous().view(-1), 
@@ -177,7 +177,7 @@ def evaluate_V2(model, loader, src_id2token, targ_id2token, teacher_forcing_rati
     avg_loss = total_loss / len(loader)
 
     # reconstruct corpus and compute bleu score 
-    probs = torch.cat(prob_corpus, dim=0)
+#    probs = torch.cat(prob_corpus, dim=0)
 #    print("After concating, probs returned as output in EvalV2 is {}".format(probs.size()))
     hyp_idxs = torch.cat(hypothesis_corpus, dim=0) 
     ref_idxs = torch.cat(reference_corpus, dim=0)
@@ -188,7 +188,7 @@ def evaluate_V2(model, loader, src_id2token, targ_id2token, teacher_forcing_rati
 
     avg_bleu = calc_corpus_bleu(ref_tokens, hyp_tokens)
     
-    return avg_loss, avg_bleu, hyp_idxs, ref_idxs, source_idxs, hyp_tokens, ref_tokens, source_tokens, probs  
+    return avg_loss, avg_bleu, hyp_idxs, ref_idxs, source_idxs, hyp_tokens, ref_tokens, source_tokens #, probs  
 
 
 # def train_and_eval_V2(model, full_loaders, fast_loaders, params, vocab, print_intermediate, save_checkpoint, 
@@ -339,10 +339,10 @@ def train_and_eval_V3(model, loaders_full, loaders_minibatch, loaders_minitrain,
             if batch % 1000 == 0 or ((epoch==num_epochs-1) & (batch==len(train_loader_)-1)):
                 result = {} 
                 result['epoch'] = epoch + batch / len(train_loader_) 
-                result['val_loss'], result['val_bleu'], val_hyp_idxs, val_ref_idxs, val_source_idxs, val_hyp_tokens, val_ref_tokens, val_source_tokens, val_probs = \
+                result['val_loss'], result['val_bleu'], val_hyp_idxs, val_ref_idxs, val_source_idxs, val_hyp_tokens, val_ref_tokens, val_source_tokens = \
                     evaluate_V2(model, dev_loader_, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
                 if not lazy_eval: 
-                    result['train_loss'], result['train_bleu'], train_hyp_idxs, train_ref_idxs, train_source_idxs, train_hyp_tokens, train_ref_tokens, train_source_tokens, train_probs = \
+                    result['train_loss'], result['train_bleu'], train_hyp_idxs, train_ref_idxs, train_source_idxs, train_hyp_tokens, train_ref_tokens, train_source_tokens = \
                             evaluate_V2(model, train_loader_to_eval, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
                 else: 
                     result['train_loss'], result['train_bleu'] = 0, 0 
@@ -358,11 +358,11 @@ def train_and_eval_V3(model, loaders_full, loaders_minibatch, loaders_minitrain,
                     if not lazy_eval: 
                         print("Sampling from training predictions...")
                         sample_predictions(train_hyp_idxs, train_ref_idxs, train_source_idxs, 
-                            train_hyp_tokens, train_ref_tokens, train_source_tokens, train_probs, targ_id2token, num_samples=inspect_samples)
+                            train_hyp_tokens, train_ref_tokens, train_source_tokens, targ_id2token, num_samples=inspect_samples)
                     # sample predictions from validation set 
                     print("Sampling from val predictions...")
                     sample_predictions(val_hyp_idxs, val_ref_idxs, val_source_idxs, 
-                        val_hyp_tokens, val_ref_tokens, val_source_tokens, val_probs, targ_id2token, num_samples=inspect_samples)
+                        val_hyp_tokens, val_ref_tokens, val_source_tokens, targ_id2token, num_samples=inspect_samples)
                     
                 if save_checkpoint: 
                     if result['val_loss'] == pd.DataFrame.from_dict(results)['val_loss'].min(): 
@@ -383,11 +383,11 @@ def train_and_eval_V3(model, loaders_full, loaders_minibatch, loaders_minitrain,
 
     return model, results  
 
-def inspect_proba(prob_array, id2token, top_n): 
-    results = pd.DataFrame(prob_array[:top_n], index=id2token[:top_n])
-    return results 
+# def inspect_proba(prob_array, id2token, top_n): 
+#     results = pd.DataFrame(prob_array[:top_n], index=id2token[:top_n])
+#     return results 
 
-def sample_predictions(hyp_idxs, ref_idxs, source_idxs, hyp_tokens, ref_tokens, source_tokens, probs, id2token, num_samples=1): 
+def sample_predictions(hyp_idxs, ref_idxs, source_idxs, hyp_tokens, ref_tokens, source_tokens, id2token, num_samples=1): 
 
     # NEW 11/27 
     """ Randomly samples num_samples to print """
