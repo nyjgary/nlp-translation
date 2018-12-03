@@ -6,13 +6,19 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import random
 
+
 RESERVED_TOKENS = {'<SOS>': 0, '<EOS>': 1, '<PAD>': 2, '<UNK>': 3}
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-### Helper method to generate pretrained embedding as tensor 
 
 def get_pretrained_emb(word2vec, token2id): 
-	""" Given word2vec model and the vocab's token2id, extract pretrained word embeddings """
+	""" Given word2vec model and vocab's token2id, generate pretrained word embeddings for all tokens in vocab. 
+		For tokens not in the word2vec model, initialize with random vectors using normal distribution 
+
+		*** TODO *** 
+		- (Optional) Consider a better way to initialize pretrained embeddings for tokens not in word2vec 
+	"""
+
 	pretrained_emb = np.zeros((len(token2id), 300)) 
 	for token in token2id: 
 		try: 
@@ -21,10 +27,11 @@ def get_pretrained_emb(word2vec, token2id):
 			pretrained_emb[token2id[token]] = np.random.normal(size=(300,))
 	return torch.from_numpy(pretrained_emb.astype(np.float32)).to(device)
 
-### Model architecture 
 
 class EncoderDecoder(nn.Module): 
-	
+
+	""" General purpose EncoderDecoder class that should work with most if not all encoders and decoders """
+
 	def __init__(self, encoder, decoder, decoder_token2id): 
 		super(EncoderDecoder, self).__init__() 
 		self.encoder = encoder 
@@ -40,13 +47,10 @@ class EncoderDecoder(nn.Module):
 		batch_size = src_idx.size()[0]
 		enc_outputs, enc_hidden = self.encoder(src_idx, src_lens)
 		dec_hidden = enc_hidden 
-#		print("dec_hidden size after inheriting from enc_hidden: {}".format(dec_hidden.size()))
-#		print("dec_hidden: {} | size: {}".format(dec_hidden.size(), dec_hidden.size()))
 		dec_outputs = Variable(torch.zeros(self.targ_max_sentence_len, batch_size, self.targ_vocab_size))
 		hypotheses = Variable(torch.zeros(self.targ_max_sentence_len, batch_size))
-#		print("targ_idx: {} | size: {}".format(targ_idx, targ_idx.size()))
-		dec_output = targ_idx[:, 0] # initialize with <SOS>
-#		print("dec_output: {} | size: {}".format(dec_output, dec_output.size()))
+		dec_output = targ_idx[:, 0] 
+
 		for di in range(1, self.targ_max_sentence_len): 
 			dec_output, dec_hidden = self.decoder(dec_output, dec_hidden, enc_outputs)
 			dec_outputs[di] = dec_output 
@@ -57,10 +61,16 @@ class EncoderDecoder(nn.Module):
 
 		return dec_outputs, hypotheses.transpose(0,1)
 
+
 class EncoderRNN(nn.Module):
 
-	""" Vanilla encoder with GRU """ 
+	""" Vanilla RNN encoder, returns twice the original hidden dimension due to bidirectional 
 	
+		*** TODO *** 
+		- Haven't retested after major bug fix. Retry later. 
+
+	""" 
+
 	def __init__(self, enc_hidden_dim, num_layers, src_max_sentence_len, pretrained_word2vec):
 		super(EncoderRNN, self).__init__()
 		self.enc_embed_dim = 300
@@ -87,15 +97,16 @@ class EncoderRNN(nn.Module):
 														   padding_value=RESERVED_TOKENS['<PAD>'])
 		output = output.index_select(0, idx_unsort)
 		hidden = hidden.index_select(1, idx_unsort).transpose(0, 1).contiguous().view(self.num_layers, batch_size, -1)
-#		print("output shape: {} | hidden shape: {}".format(output.size(), hidden.size()))
+
 		return output, hidden
 
 	def initHidden(self, batch_size):
 		return torch.zeros(2*self.num_layers, batch_size, self.enc_hidden_dim).to(device)
 	
+
 class EncoderSimpleRNN(nn.Module):
 
-	""" Vanilla encoder with GRU """ 
+	""" Vanilla RNN encoder. Sums the bidirectional hidden/output instead of returning twice the hidden dimension """ 
 	
 	def __init__(self, enc_hidden_dim, num_layers, src_max_sentence_len, pretrained_word2vec):
 		super(EncoderSimpleRNN, self).__init__()
@@ -117,73 +128,30 @@ class EncoderSimpleRNN(nn.Module):
 		embedded = self.embedding(enc_input)
 		embedded = torch.nn.utils.rnn.pack_padded_sequence(embedded, enc_input_lens, batch_first=True)
 		hidden = self.initHidden(batch_size).to(device)
-#		print("Hidden size after initializing: {}".format(hidden.size()))
 		output, hidden = self.gru(embedded, hidden)
-#		print("Hidden size after GRU: {}".format(hidden.size()))
 		output, _ = torch.nn.utils.rnn.pad_packed_sequence(output, batch_first=True, 
 														   total_length=self.src_max_sentence_len,
 														   padding_value=RESERVED_TOKENS['<PAD>'])
-#		print("Output size after GRU: {}".format(output.size()))
 		output = output.index_select(0, idx_unsort)
 		hidden = hidden.index_select(1, idx_unsort)
-#		print("Hidden size after unsorting: {}".format(hidden.size()))
-#		print("Output size after unsorting: {}".format(output.size()))
 		output = output[:, :, :self.enc_hidden_dim] + output[:, :, self.enc_hidden_dim:]
-#		print("Output size after summing: {}".format(output.size()))		
 		hidden = hidden.view(self.num_layers, 2, batch_size, self.enc_hidden_dim)
-#		print("Hidden size after viewing: {}".format(hidden.size()))
 		hidden = hidden[:, 0, :, :].squeeze(dim=1) + hidden[:, 1, :, :].squeeze(dim=1)
-#		print("Hidden size after summing and squeezing: {}".format(hidden.size()))
 		hidden = hidden.view(self.num_layers, batch_size, self.enc_hidden_dim)
-#		print("Hidden size right before outputting result: {}".format(hidden.size()))		
-#		print("From SimpleEncoder we have output shape = {} and hidden shape = {}".format(output.size(), hidden.size()))
+
 		return output, hidden
 
 	def initHidden(self, batch_size):
 		return torch.zeros(2*self.num_layers, batch_size, self.enc_hidden_dim).to(device)
 
 
-class DecoderSimpleRNN(nn.Module):
-
-	""" Vanilla decoder with GRU. No attention, final encoder hidden layer only passed into first time step of decoder.
-	""" 
-
-	def __init__(self, dec_hidden_dim, enc_hidden_dim, num_layers, targ_vocab_size, targ_max_sentence_len, pretrained_word2vec):
-		super(DecoderSimpleRNN, self).__init__()
-		self.dec_embed_dim = 300
-		self.dec_hidden_dim = dec_hidden_dim 
-		self.enc_hidden_dim = enc_hidden_dim
-		self.targ_vocab_size = targ_vocab_size
-		self.targ_max_sentence_len = targ_max_sentence_len
-		self.num_layers = num_layers
-		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True).to(device)
-#		self.gru = nn.GRU(self.dec_embed_dim + 2 * self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers).to(device)
-		self.gru = nn.GRU(self.dec_embed_dim, self.dec_hidden_dim, num_layers=self.num_layers).to(device)
-		self.out = nn.Linear(dec_hidden_dim, self.targ_vocab_size).to(device)
-		self.softmax = nn.LogSoftmax(dim=1).to(device)
-
-	def forward(self, dec_input, dec_hidden, enc_outputs): 
-		dec_input = dec_input.to(device)
-		dec_hidden = dec_hidden.to(device)
-		enc_outputs = enc_outputs.to(device)
-		batch_size = dec_input.size()[0]
-		embedded = self.embedding(dec_input).view(1, batch_size, -1)
-		# dec_hidden = dec_hidden.view(-1, batch_size, self.dec_hidden_dim)
-		dec_hidden = dec_hidden.view(self.num_layers, batch_size, self.dec_hidden_dim)
-		# context = torch.cat([enc_outputs[:, -1, :self.enc_hidden_dim], 
-		# 					 enc_outputs[:, 0, self.enc_hidden_dim:]], dim=1).unsqueeze(0)
-		# concat = torch.cat([embedded, context], 2).to(device)
-		# output, hidden = self.gru(concat, dec_hidden)
-#		print("dec_hidden size before going into GRU: {}".format(dec_hidden.size()))
-		output, hidden = self.gru(embedded, dec_hidden)
-#		print("After GRU, output size is {} and hidden size is {}".format(output.size(), hidden.size()))
-		output = self.softmax(self.out(output[0].to(device)))    
-		return output, hidden
-		
 class DecoderRNN(nn.Module):
 
-	""" Vanilla decoder with GRU. 
-		No attention, but the final hidden layer from encoder is repeatedly passed as input to each time step 
+	""" Vanilla decoder without attention, but final layer from encoder is repeatedly passed as input to each time step. 
+		Handles output from EncoderRNN that returns twice the encoder hidden dimension.  
+
+		*** TODO *** 
+		- Haven't retested after major bug fix. Retry later. 
 	""" 
 
 	def __init__(self, dec_hidden_dim, enc_hidden_dim, num_layers, targ_vocab_size, targ_max_sentence_len, pretrained_word2vec):
@@ -212,11 +180,11 @@ class DecoderRNN(nn.Module):
 		output = self.softmax(self.out(output[0].to(device)))    
 		return output, hidden
 
+
 class DecoderRNNV2(nn.Module):
 
-	""" Vanilla decoder with GRU. 
-		No attention, but the final hidden layer from encoder is repeatedly passed as input to each time step. 
-		V2 = that layer passed is summed rather than concat  
+	""" Vanilla decoder without attention, but final layer from encoder is repeatedly passed as input to each time step. 
+		This handles the output from EncoderSimpleRNN, which sums the bidrectional output. 
 	""" 
 
 	def __init__(self, dec_hidden_dim, enc_hidden_dim, num_layers, targ_vocab_size, targ_max_sentence_len, pretrained_word2vec):
@@ -236,27 +204,56 @@ class DecoderRNNV2(nn.Module):
 		dec_input = dec_input.to(device)
 		dec_hidden = dec_hidden.to(device)
 		enc_outputs = enc_outputs.to(device)
-#		print("Encoder output size received by decoder: {}".format(enc_outputs.size()))
 		batch_size = dec_input.size()[0]
 		embedded = self.embedding(dec_input).view(1, batch_size, -1)	
-		# print("First part of context: {}".format(enc_outputs[:, -1, :self.enc_hidden_dim].size()))	
-		# print("Second part of context: {}".format(enc_outputs[:, 0, self.enc_hidden_dim:].size()))
-		# print("After Cat before unsqueezing: {}".format(torch.cat([enc_outputs[:, -1, :self.enc_hidden_dim], 
-		# 	enc_outputs[:, 0, self.enc_hidden_dim:]], dim=1).size()))
-		# context = torch.cat([enc_outputs[:, -1, :self.enc_hidden_dim], 
-		# 					 enc_outputs[:, 0, self.enc_hidden_dim:]], dim=1).unsqueeze(0)
-		# print("Context size after manipulation: {}".format(context.size()))
 		context = enc_outputs[:, -1, :].unsqueeze(dim=1).transpose(0, 1) 
-#		print("New context size: {}".format(context.size()))		
 		concat = torch.cat([embedded, context], 2).to(device)
-#		print("Concat size: {}".format(concat.size()))		
 		output, hidden = self.gru(concat, dec_hidden)
 		output = self.softmax(self.out(output[0].to(device)))    
 		return output, hidden
 
+
+class DecoderSimpleRNN(nn.Module):
+
+	""" Vanilla decoder without attention, and final encoder hidden layer NOT passed to every time step of decoder 
+
+		*** TODO *** 
+		- Haven't retested after major bug fix. Retry later. 
+	""" 
+
+	def __init__(self, dec_hidden_dim, enc_hidden_dim, num_layers, targ_vocab_size, targ_max_sentence_len, pretrained_word2vec):
+		super(DecoderSimpleRNN, self).__init__()
+		self.dec_embed_dim = 300
+		self.dec_hidden_dim = dec_hidden_dim 
+		self.enc_hidden_dim = enc_hidden_dim
+		self.targ_vocab_size = targ_vocab_size
+		self.targ_max_sentence_len = targ_max_sentence_len
+		self.num_layers = num_layers
+		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True).to(device)
+		self.gru = nn.GRU(self.dec_embed_dim, self.dec_hidden_dim, num_layers=self.num_layers).to(device)
+		self.out = nn.Linear(dec_hidden_dim, self.targ_vocab_size).to(device)
+		self.softmax = nn.LogSoftmax(dim=1).to(device)
+
+	def forward(self, dec_input, dec_hidden, enc_outputs): 
+		dec_input = dec_input.to(device)
+		dec_hidden = dec_hidden.to(device)
+		enc_outputs = enc_outputs.to(device)
+		batch_size = dec_input.size()[0]
+		embedded = self.embedding(dec_input).view(1, batch_size, -1)
+		dec_hidden = dec_hidden.view(self.num_layers, batch_size, self.dec_hidden_dim)
+		output, hidden = self.gru(embedded, dec_hidden)
+		output = self.softmax(self.out(output[0].to(device)))    
+
+		return output, hidden
+		
+
 class Attention(nn.Module): 
 	
-	""" Implements the attention mechanism by Bahdanau et al. (2015) """
+	""" Implements the attention mechanism by Bahdanau et al. (2015) 
+
+		*** TODO *** 
+		- Haven't retested after major bug fix. Retry later. 
+	"""
 	
 	def __init__(self, enc_hidden_dim, dec_hidden_dim, num_annotations, num_layers): 
 		super(Attention, self).__init__() 
@@ -280,7 +277,11 @@ class Attention(nn.Module):
 
 class DecoderAttnRNN(nn.Module):
 
-	""" Decoder with attention (Bahdanau) """ 
+	""" Decoder with attention (Bahdanau) 
+
+		*** TODO *** 
+		- Haven't retested after major bug fix. Retry later. 
+	""" 
 	
 	def __init__(self, dec_hidden_dim, enc_hidden_dim, num_layers, targ_vocab_size, src_max_sentence_len, targ_max_sentence_len, pretrained_word2vec):
 		super(DecoderAttnRNN, self).__init__()
