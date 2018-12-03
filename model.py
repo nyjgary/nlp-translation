@@ -166,7 +166,8 @@ class DecoderSimpleRNN(nn.Module):
 		enc_outputs = enc_outputs.to(device)
 		batch_size = dec_input.size()[0]
 		embedded = self.embedding(dec_input).view(1, batch_size, -1)
-		dec_hidden = dec_hidden.view(-1, batch_size, self.dec_hidden_dim)
+		# dec_hidden = dec_hidden.view(-1, batch_size, self.dec_hidden_dim)
+		dec_hidden = dec_hidden.view(self.num_layers, batch_size, self.dec_hidden_dim)
 		# context = torch.cat([enc_outputs[:, -1, :self.enc_hidden_dim], 
 		# 					 enc_outputs[:, 0, self.enc_hidden_dim:]], dim=1).unsqueeze(0)
 		# concat = torch.cat([embedded, context], 2).to(device)
