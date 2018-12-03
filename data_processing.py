@@ -22,14 +22,13 @@ from os import listdir
 from ast import literal_eval
 
 
-### Assign indices to reserved tokens
-
 RESERVED_TOKENS = {'<SOS>': 0, '<EOS>': 1, '<PAD>': 2, '<UNK>': 3}
 
-### Data Processing Helper Functions 
 
 def text2tokens(raw_text_fp, lang_type): 
-    """ Takes filepath to raw text and outputs a list of lists, each representing a sentence of words (tokens) """
+    """ Takes filepath of raw text and outputs a list of lists, each representing a sentence of words (tokens) 
+        Note that it appends to target sentences <SOS> at the start, and <EOS> at the end, but only <EOS> at the end for source sentences
+    """
     with open(raw_text_fp) as f:
         tokens_data = [line.lower().split() for line in f.readlines()]
         if lang_type == 'source': 
@@ -38,18 +37,20 @@ def text2tokens(raw_text_fp, lang_type):
             tokens_data = [['<SOS>'] + datum + ['<EOS>'] for datum in tokens_data]
     return tokens_data 
 
+
 def load_word2vec(lang): 
     """ Loads pretrained vectors for a given language """
     filepath = "data/pretrained_word2vec/wiki.zh.vec".format(lang)
     word2vec = KeyedVectors.load_word2vec_format(filepath)
     return word2vec
 
+
 def build_vocab(token_lists, max_vocab_size, word2vec): 
-    # UPDATE 11/28: take the most frequently occuring N words even if it doesn't exist in word2vec
     """ Takes lists of tokens (representing sentences of words), max_vocab_size, word2vec model and returns: 
         - id2token: list of tokens, where id2token[i] returns token that corresponds to i-th token 
         - token2id: dictionary where keys represent tokens and corresponding values represent their indices
-        Note that the vocab will comprise N=max_vocab_size-len(RESERVED_TOKENS) tokens that are in word2vec model 
+        Note that the vocab will comprise N=max_vocab_size-len(RESERVED_TOKENS) most frequently occuring tokens, 
+        including those for which we don't have pretrained embeddings. 
     """
     num_vocab = max_vocab_size - len(RESERVED_TOKENS)
     all_tokens = [token for sublist in token_lists for token in sublist]
@@ -58,14 +59,19 @@ def build_vocab(token_lists, max_vocab_size, word2vec):
     id2token = sorted(RESERVED_TOKENS, key=RESERVED_TOKENS.get) + list(vocab)
     token2id = dict(zip(id2token, range(max_vocab_size)))
     
-    # check out how many words are in word2vec vs. not 
-    not_in_word2vec = [1 for token in token2id if token not in word2vec]
-    pct_of_corpus = 100 * sum([token_counter[token] for token in token_counter if token not in word2vec]) / len(all_tokens)
-    
-    print("A vocabulary of {} is generated from a set of {} unique tokens.".format(len(token2id), len(token_counter)))
-    print("{} vocab tokens are not in word2vec, comprising {:.1f}% of entire corpus.".format(len(not_in_word2vec), pct_of_corpus))
+    # check how many unique tokens + pct of corpus are represented in our vocab 
+    tokens_in_vocab_pct_corpus = 100 * sum([token_counter[token] for token in vocab]) / len(all_tokens)
+    print("A vocabulary of {} is generated from a set of {} unique tokens, representing {:.1f}% of entire corpus".format(
+        len(vocab), len(token_counter), tokens_in_vocab_pct_corpus))
+
+    # check how many unique tokens + pct of corpus are represented in our vocab AND have pretrained embeddings 
+    tokens_in_vocab_pretrained = [token for token in vocab if token in word2vec]
+    tokens_in_vocab_pretrained_pct_corpus = 100 * sum([token_counter[token] for token in tokens_in_vocab_pretrained]) / len(all_tokens)
+    print("{} tokens in our vocab have pretrained embeddings, representing {:.1f}% of entire corpus".format(
+        len(tokens_in_vocab_pretrained), tokens_in_vocab_pretrained_pct_corpus)) 
     
     return token2id, id2token 
+
 
 def tokens2indices(tokens_data, token2id): 
     """ Takes tokenized data and token2id dictionary and returns indexed data """
@@ -75,9 +81,11 @@ def tokens2indices(tokens_data, token2id):
         indices_data.append(indices_datum)    
     return indices_data
 
+
 def get_filepath(split, src_lang, targ_lang, lang_type): 
     """ Locates data filepath given data split type (train/dev/test), translation pairs (src_lang -> targ_lang), 
-        and the language type (source or target)
+        and the language type (source or target) 
+        e.g. to load train.tok.zh, use get_filepath(split='train', src_lang='zh', targ_lang='en', lang_type='source')
     """
     folder_name = "data/iwslt-{}-{}/".format(src_lang, targ_lang)
     if lang_type == 'source': 
@@ -86,8 +94,9 @@ def get_filepath(split, src_lang, targ_lang, lang_type):
         file_name = "{}.tok.{}".format(split, targ_lang)
     return folder_name + file_name 
 
+
 def get_filepaths(src_lang, targ_lang): 
-    """ Takes language names to be translated from and to (in_lang and out_lang respectively) as inputs, 
+    """ Takes language names ('vi', 'zh', 'en') to be translated from and to (in_lang and out_lang respectively) as inputs, 
         returns a nested dictionary containing the filepaths for input/output data for train/dev/test sets  
     """
     fps = {} 
@@ -106,11 +115,12 @@ def get_filepaths(src_lang, targ_lang):
             
     return fps 
 
+
 def generate_vocab(src_lang, targ_lang, src_vocab_size, targ_vocab_size):
-    # UPDATE 11/28: take the most frequently occuring N words even if it doesn't exist in word2vec
-    # UPDATE 11/30: fixed bug in get_filepath; previously used global variables  
-    """ Outputs a nested dictionary containing token2id, id2token, and word embeddings 
-    for source and target lang's vocab """
+    """ Takes source and target language names and vocab sizes, outputs a nested dictionary vocab 
+        containing token2id, id2token, and word2vec for both source and target languages. 
+        Note the first level of keys is lang_name (e.g. 'en'), and that of nested dictionary are token2id, id2token, and word2vec.
+    """
     
     vocab = {} 
     for lang, vocab_size in zip([src_lang, targ_lang], [src_vocab_size, targ_vocab_size]): 
@@ -131,15 +141,15 @@ def generate_vocab(src_lang, targ_lang, src_vocab_size, targ_vocab_size):
         
     return vocab 
 
+
 def process_data(src_lang, targ_lang, vocab, sample_limit=None): 
-    # UPDATE 11/27: added sample_limit parameter to output only a subset of sentences 
-    """ Takes source language and target language names and respective max vocab sizes as inputs 
-        and returns as a nested dictionary containing: 
-        - train_indices, val_indices, test_indices (as lists of source-target tuples)
-        - train_tokens, val_tokens, test_tokens (as lists of source-target tuples)
-        - source language's token2id and id2token 
-        - target language's token2id and id2token
-    """
+    """ - Main function that takes source and target language names, vocab dict generated, 
+        and an optional sample_limit representing the number of sentences to subset if necessary. 
+        - Returns data as a nested dictionary containing the indices and tokens of train/dev/test data 
+        for both source and target languages. 
+        - Note the hierachy of data dict is: data[split][lang_type]['tokens' or 'indices'], 
+        e.g. to access indices of source training data, use data['train']['source']['indices']
+    """ 
     
     # get filepaths 
     data = get_filepaths(src_lang, targ_lang)
@@ -159,7 +169,6 @@ def process_data(src_lang, targ_lang, vocab, sample_limit=None):
             
     return data
 
-### Create PyTorch Data Loaders 
 
 class TranslationDataset(Dataset): 
     """ 
@@ -190,6 +199,7 @@ class TranslationDataset(Dataset):
         targ_len = len(targ_idx)
         return [src_idx, targ_idx, src_len, targ_len]
     
+
 def collate_func(src_max_sentence_len, targ_max_sentence_len, batch): 
     """ Customized function for DataLoader that dynamically pads the batch so that all data have the same length"""
     
@@ -214,10 +224,11 @@ def collate_func(src_max_sentence_len, targ_max_sentence_len, batch):
     return [torch.from_numpy(np.array(src_idxs)), torch.from_numpy(np.array(targ_idxs)), 
             torch.LongTensor(src_lens), torch.LongTensor(targ_lens)]
 
+
 def create_dataloaders(processed_data, src_max_sentence_len, targ_max_sentence_len, batch_size): 
     """ Takes processed_data as dictionary output from process_data func, maximum sentence lengths, 
-        and outputs train_loader, dev_loader, and test_loaders 
-        UPDATE 11/30: output loader dict instead to easily pass into train function 
+        outputs a nested dictionary called 'loaders' that holds train, dev, and test loaders, 
+        e.g. loaders['dev'] holds the data loader for dev/validation set 
     """
     loaders = {} 
     for split in ['train', 'dev', 'test']: 
@@ -226,4 +237,4 @@ def create_dataloaders(processed_data, src_max_sentence_len, targ_max_sentence_l
         loaders[split] = DataLoader(dataset, batch_size=batch_size, shuffle=False, 
                                     collate_fn=partial(collate_func, src_max_sentence_len, targ_max_sentence_len))
     return loaders 
-
+    
