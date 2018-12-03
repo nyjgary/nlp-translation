@@ -131,9 +131,11 @@ class EncoderSimpleRNN(nn.Module):
 		output = output[:, :, :self.enc_hidden_dim] + output[:, :, self.enc_hidden_dim:]
 #		print("Output size after summing: {}".format(output.size()))		
 		hidden = hidden.view(self.num_layers, 2, batch_size, self.enc_hidden_dim)
-#		print("Hidden size after viewing: {}".format(hidden.size()))
+		print("Hidden size after viewing: {}".format(hidden.size()))
 		hidden = hidden[:, 0, :, :].squeeze(dim=1) + hidden[:, 1, :, :].squeeze(dim=1)
-#		print("Hidden size after summing and squeezing: {}".format(hidden.size()))
+		print("Hidden size after summing and squeezing: {}".format(hidden.size()))
+		hidden = hidden.view(self.num_layers, batch_size, self.enc_hidden_dim)
+		print("Hidden size right before outputting result: {}".format(hidden.size()))		
 #		print("From SimpleEncoder we have output shape = {} and hidden shape = {}".format(output.size(), hidden.size()))
 		return output, hidden
 
