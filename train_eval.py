@@ -41,7 +41,7 @@ def filter_reserved_tokens(sentence_as_list):
     return output 
 
 
-def tensor2corpus_V2(tensor, id2token):  
+def tensor2corpus(tensor, id2token):  
     """ Takes a tensor representing a batch of sentences (size: batch_size * max_sentence_length), and returns 
         its token equivalent (as list of tokens) """ 
     
@@ -79,7 +79,7 @@ def calc_corpus_bleu(ref_list, hyp_list):
     return avg_bleu 
 
 
-def evaluate_V2(model, loader, src_id2token, targ_id2token, teacher_forcing_ratio): 
+def evaluate(model, loader, src_id2token, targ_id2token, teacher_forcing_ratio): 
     """ Evaluates a model given a loader, id2token dicts, and teacher_forcing_ratio. 
         Outputs avg loss, avg bleu, as well as indices and tokens representing source, reference, and model translations. 
         
@@ -87,8 +87,6 @@ def evaluate_V2(model, loader, src_id2token, targ_id2token, teacher_forcing_rati
         - Accumulate bleu score rather than hold all in memory 
         - Accumulate a sample (e.g. 1 per minibatch) of source, reference, and model translations for sampling later 
         - Package output indices and tokens as two dictionaries for neatness sake 
-        - Factor out code to compute loss as a new method: compute_loss(outputs, targets) <- be careful of dimension 
-        - Change method name and all corresponding references evaluate_V2 >>> evaluate 
     """
     
     model.eval() 
@@ -121,9 +119,9 @@ def evaluate_V2(model, loader, src_id2token, targ_id2token, teacher_forcing_rati
     hyp_idxs = torch.cat(hypothesis_corpus, dim=0) 
     ref_idxs = torch.cat(reference_corpus, dim=0)
     source_idxs = torch.cat(source_corpus, dim=0)
-    hyp_tokens = tensor2corpus_V2(hyp_idxs, targ_id2token)
-    ref_tokens = tensor2corpus_V2(ref_idxs, targ_id2token)
-    source_tokens = tensor2corpus_V2(source_idxs, src_id2token)
+    hyp_tokens = tensor2corpus(hyp_idxs, targ_id2token)
+    ref_tokens = tensor2corpus(ref_idxs, targ_id2token)
+    source_tokens = tensor2corpus(source_idxs, src_id2token)
 
     # compute evaluation metrics 
     avg_loss = total_loss / len(loader)
@@ -132,7 +130,7 @@ def evaluate_V2(model, loader, src_id2token, targ_id2token, teacher_forcing_rati
     return avg_loss, avg_bleu, hyp_idxs, ref_idxs, source_idxs, hyp_tokens, ref_tokens, source_tokens  
 
 
-def train_and_eval_V3(model, loaders_full, loaders_minibatch, loaders_minitrain, params, vocab, 
+def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, params, vocab, 
     lazy_eval=True, print_intermediate=True, save_checkpoint=True, save_to_log=True, inspect_samples=None): 
     
     """ Main function to train and evaluate model: takes a model, loaders, and a bunch of parameters and 
@@ -145,12 +143,6 @@ def train_and_eval_V3(model, loaders_full, loaders_minibatch, loaders_minitrain,
         - save_checkpoint = saves model's state dict into a .pth.tar file named after model_name 
         - save_to_log = 
         - inspect_samples = specify number of samples to print out every 1K batches 
-
-        *** TODO ***
-        - Factor out code to compute loss as a new method: compute_loss(outputs, targets) <- be careful of dimension  
-        - Change method name and all corresponding references train_and_eval_V3 >>> train_and_eval 
-        - With evaluate_V2 outputting idxs and tokens as dicts, handle the change here 
-
     """
     
     start_time = time.time() 
@@ -204,11 +196,11 @@ def train_and_eval_V3(model, loaders_full, loaders_minibatch, loaders_minitrain,
 
                 # calculate metrics on validation set 
                 result['val_loss'], result['val_bleu'], val_hyp_idxs, val_ref_idxs, val_source_idxs, val_hyp_tokens, val_ref_tokens, val_source_tokens = \
-                    evaluate_V2(model, dev_loader_, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
+                    evaluate(model, dev_loader_, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
                 # calculate metrics on train set (or proxy thereof) only if lazy_eval not set to True 
                 if not lazy_eval: 
                     result['train_loss'], result['train_bleu'], train_hyp_idxs, train_ref_idxs, train_source_idxs, train_hyp_tokens, train_ref_tokens, train_source_tokens = \
-                            evaluate_V2(model, train_loader_proxy, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
+                            evaluate(model, train_loader_proxy, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
                 else: 
                     result['train_loss'], result['train_bleu'] = 0, 0 
 
