@@ -348,29 +348,17 @@ class Attention(nn.Module):
 		# print("Attention module receives encoder outputs of size {} and last_dec_hidden of size {}".format(
 		# 	encoder_outputs.size(), last_dec_hidden.size()))
 		time_steps = encoder_outputs.size()[1]
-		encoder_outputs, last_dec_hidden = encoder_outputs.to(device), last_dec_hidden.to(device) # [B, S, H], [L, B, H]
+		encoder_outputs, last_dec_hidden = encoder_outputs.to(device), last_dec_hidden.to(device) # [B, T, H], [L, B, H]
 		batch_size = encoder_outputs.size()[0]
-		v_broadcast = self.v.repeat(batch_size, 1, 1).to(device) # [B, 1, S]
-#		print("v was broadcasted to become size {}".format(v_broadcast.size()))
-#		print("After transposing 0 <> 1 and subsetting, last_dec_hidden has shape {}".format(last_dec_hidden.transpose(0, 1)[:, -1, :].size()))
+		v_broadcast = self.v.repeat(batch_size, 1, 1).to(device) # [B, 1, H]
 		last_dec_hidden = last_dec_hidden.transpose(0, 1)[:, -1, :].unsqueeze(1) # [B, L, H] -> [B, 1, H] -> [B, H] (take last layer)
-#		print("After unsqueezing, last_dec_hidden has shape {}".format(last_dec_hidden.size())) 
-		hidden_broadcast = last_dec_hidden.repeat(1, time_steps, 1).to(device) # [B, S, H]
-#		print("last_dec_hidden was broadcasted to become size {}".format(hidden_broadcast.size()))
-		concat = torch.cat([encoder_outputs, hidden_broadcast], dim=2).to(device) # [B, S, 2H]
-#		print("after concating encoder_outputs with hidden_broadcast obtain {}".format(concat.size() ))
-#		print("applying attention on concat yields {}".format(self.attn(concat).size())) # [B, S, S] *** POSSIBLE ERROR *** 
-#		print(self.attn(concat))
-		energies = v_broadcast.bmm(torch.tanh(self.attn(concat)).transpose(1, 2)) # BMM: [B, 1, S] * [B, S, S] = [B, 1, S]
-#		energies = v_broadcast.bmm(torch.tanh(self.attn(concat)).transpose(1, 2)) # switched order, probably wrong  
-#		print("bmm-ing with v_broadcast yields {}".format(energies.size()))
-#		print("applying softmax on second dimension yields {}".format(F.softmax(energies, dim=2).size()))
-		attn_weights = F.softmax(energies, dim=2).squeeze(1) # [B, 1, S] -> [B, S]
-#		print("after squeezing dim 1 we get attention weights {}".format(attn_weights.size()))
+		hidden_broadcast = last_dec_hidden.repeat(1, time_steps, 1).to(device) # [B, T, H]
+		concat = torch.cat([encoder_outputs, hidden_broadcast], dim=2).to(device) # [B, T, 2H]
+		energies = torch.tanh(self.attn(concat)).transpose(1, 2) # [B, T, H] -> [B, H, T]
+		energies = torch.bmm(v_broadcast, energies).squeeze(1) # [B, 1, H] * [B, H, T] -> [B, 1, T] -> [B, T]
+		attn_weights = F.softmax(energies, dim=1) # [B, T]
 
 		return attn_weights
-
-
 
 
 class DecoderAttnRNN(nn.Module):
@@ -398,27 +386,19 @@ class DecoderAttnRNN(nn.Module):
 		self.softmax = nn.LogSoftmax(dim=1).to(device)
 
 	def forward(self, dec_input, dec_hidden, enc_outputs):
-		dec_input, dec_hidden = dec_input.to(device), dec_hidden.to(device) # [batch_size], [num_layers * batch_size * dec_hidden_dim] 
+		dec_input, dec_hidden = dec_input.to(device), dec_hidden.to(device) # [B], [L, B, H] 
 #		print("dec_input size is {}. dec_hidden size is {}".format(dec_input.size(), dec_hidden.size()))
-		enc_outputs = enc_outputs.to(device) # [batch_size * seq_len * enc_hidden_dim]
+		enc_outputs = enc_outputs.to(device) # [B * T * H] 
 #		print("enc_outputs size is {}".format(enc_outputs.size()))
 		batch_size = dec_input.size()[0]
-		embedded = self.embedding(dec_input).view(1, batch_size, -1) # [1, batch_size, input_dim]
+		embedded = self.embedding(dec_input).view(1, batch_size, -1) # [1, B, H]
 #		print("embedded size is {}".format(embedded.size()))
-		attn_weights = self.attn(encoder_outputs=enc_outputs, last_dec_hidden=dec_hidden).unsqueeze(1) # [batch_size, 1, seq_len]
-#		print(attn_weights)
+		attn_weights = self.attn(encoder_outputs=enc_outputs, last_dec_hidden=dec_hidden).unsqueeze(1) # [B, 1, T]
 #		print("attn_weights size is {}".format(attn_weights.size()))
 #		print("after bmm, attn_weights becomes context with size {}".format(attn_weights.bmm(enc_outputs).size())) 
-		context = attn_weights.bmm(enc_outputs).transpose(0, 1) # before transpose: [batch_size, 1, enc_hidden_dim], after: [1, batch_size, enc_hidden_dim]
-#		print("after transposing, context size is {}".format(context.size()))
-		concat = torch.cat([embedded, context], 2).to(device) # [batch_size, 1, enc_hidden_dim + input_dim]
-#		print("after concatenating embedded and context along dim 2 we get size {}".format(concat.size()))
-		output, hidden = self.gru(concat, dec_hidden) # [1, batch_size * dec_hidden_dim]
-#		print("after gru output has size {}".format(output.size()))
-#		print("after out FC layer output has size {}".format(self.out(output[0]).size()))
-		output = self.softmax(self.out(output[0].to(device))) # [batch_size * vocab_size]   
-#		print("after softmax output has size {}".format(output.size()))
+		context = attn_weights.bmm(enc_outputs).transpose(0, 1) # [B, 1, T] * [B, T, H] = [B, 1, H] -> [1, B, H]
+		concat = torch.cat([embedded, context], 2).to(device) # [1, B, 2H] 
+		output, hidden = self.gru(concat, dec_hidden) # [1, B, H], [2, B, H] 
+		output = self.softmax(self.out(output[0].to(device))) # [B, H] -> [B, V] 
 
 		return output, hidden, attn_weights 
-
-
