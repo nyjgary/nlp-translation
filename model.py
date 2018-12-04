@@ -65,7 +65,7 @@ class EncoderDecoder(nn.Module):
 class EncoderRNN(nn.Module):
 
 	""" Vanilla RNN encoder, returns twice the original hidden dimension due to bidirectional 
-	
+
 		*** TODO *** 
 		- Haven't retested after major bug fix. Retry later. 
 
@@ -258,7 +258,7 @@ class Attention(nn.Module):
 	def __init__(self, enc_hidden_dim, dec_hidden_dim, num_annotations, num_layers): 
 		super(Attention, self).__init__() 
 		self.num_annotations = num_annotations
-		self.input_dim = enc_hidden_dim * 2 + dec_hidden_dim
+		self.input_dim = enc_hidden_dim + dec_hidden_dim
 		self.attn = nn.Linear(self.input_dim, self.num_annotations).to(device)
 		self.v = nn.Parameter(torch.rand(self.num_annotations))
 		self.num_layers = num_layers 
@@ -274,6 +274,7 @@ class Attention(nn.Module):
 		energies = v_broadcast.bmm(torch.tanh(self.attn(concat)))
 		attn_weights = F.softmax(energies, dim=2).squeeze(1)
 		return attn_weights
+
 
 class DecoderAttnRNN(nn.Module):
 
@@ -295,19 +296,27 @@ class DecoderAttnRNN(nn.Module):
 		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True).to(device)
 		self.attn = Attention(self.enc_hidden_dim, self.dec_hidden_dim, 
 							  num_annotations = self.src_max_sentence_len, num_layers=self.num_layers).to(device)
-		self.gru = nn.GRU(self.dec_embed_dim + 2 * self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers).to(device)
+		self.gru = nn.GRU(self.dec_embed_dim + self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers).to(device)
 		self.out = nn.Linear(self.dec_hidden_dim, self.targ_vocab_size).to(device)
 		self.softmax = nn.LogSoftmax(dim=1).to(device)
 
 	def forward(self, dec_input, dec_hidden, enc_outputs):
 		dec_input, dec_hidden = dec_input.to(device), dec_hidden.to(device)
+		print("dec_input size is {}. dec_hidden size is {}".format(dec_input.size(), dec_hidden.size()))
 		enc_outputs = enc_outputs.to(device)
+		print("enc_outputs size is {}".format(enc_outputs))
 		batch_size = dec_input.size()[0]
 		embedded = self.embedding(dec_input).view(1, batch_size, -1)
+		print("embedded size is {}".format(embedded))
 		attn_weights = self.attn(encoder_outputs=enc_outputs, last_dec_hidden=dec_hidden).unsqueeze(1)
+		print("attn_weights size is {}".format(attn_weights.size()))
+		print("after bmm, attn_weights becomes context with size {}".format(attn_weights.bmm(enc_outputs).size()))
 		context = attn_weights.bmm(enc_outputs).transpose(0, 1)
+		print("after transposing, context size is {}".format(context.size()))
 		concat = torch.cat([embedded, context], 2).to(device)
+		print("after concatenating embedded and context along dim 2 we get size {}".format(concat.size()))
 		output, hidden = self.gru(concat, dec_hidden)
+		print("after gru output has size {}".format(output.size()))
 		output = self.softmax(self.out(output[0].to(device)))    
 		return output, hidden
 
