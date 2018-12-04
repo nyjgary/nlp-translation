@@ -302,21 +302,21 @@ class DecoderAttnRNN(nn.Module):
 
 	def forward(self, dec_input, dec_hidden, enc_outputs):
 		dec_input, dec_hidden = dec_input.to(device), dec_hidden.to(device)
-		print("dec_input size is {}. dec_hidden size is {}".format(dec_input.size(), dec_hidden.size()))
+#		print("dec_input size is {}. dec_hidden size is {}".format(dec_input.size(), dec_hidden.size()))
 		enc_outputs = enc_outputs.to(device)
-		print("enc_outputs size is {}".format(enc_outputs))
+#		print("enc_outputs size is {}".format(enc_outputs))
 		batch_size = dec_input.size()[0]
 		embedded = self.embedding(dec_input).view(1, batch_size, -1)
-		print("embedded size is {}".format(embedded))
+#		print("embedded size is {}".format(embedded))
 		attn_weights = self.attn(encoder_outputs=enc_outputs, last_dec_hidden=dec_hidden).unsqueeze(1)
-		print("attn_weights size is {}".format(attn_weights.size()))
-		print("after bmm, attn_weights becomes context with size {}".format(attn_weights.bmm(enc_outputs).size()))
+#		print("attn_weights size is {}".format(attn_weights.size()))
+#		print("after bmm, attn_weights becomes context with size {}".format(attn_weights.bmm(enc_outputs).size()))
 		context = attn_weights.bmm(enc_outputs).transpose(0, 1)
-		print("after transposing, context size is {}".format(context.size()))
+#		print("after transposing, context size is {}".format(context.size()))
 		concat = torch.cat([embedded, context], 2).to(device)
-		print("after concatenating embedded and context along dim 2 we get size {}".format(concat.size()))
+#		print("after concatenating embedded and context along dim 2 we get size {}".format(concat.size()))
 		output, hidden = self.gru(concat, dec_hidden)
-		print("after gru output has size {}".format(output.size()))
+#		print("after gru output has size {}".format(output.size()))
 		output = self.softmax(self.out(output[0].to(device)))    
 		return output, hidden
 
