@@ -524,3 +524,50 @@ class Attention_Test(nn.Module):
 		attn_weights = F.softmax(energies, dim=1) # [B, T]
 
 		return attn_weights
+    
+# CNN encoder
+class EncoderCNN(nn.Module):
+	
+	def __init__(self, pretrained_word2vec, src_max_sentence_len=10, enc_hidden_dim=512, dropout=0.1):
+		super(EncoderCNN, self).__init__()
+		self.enc_embed_dim = 300
+		self.enc_hidden_dim = enc_hidden_dim
+		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True).to(device)
+		self.conv1_a = nn.Conv1d(300, enc_hidden_dim, kernel_size=3, padding=1).to(device)
+		self.conv2_a = nn.Conv1d(enc_hidden_dim, enc_hidden_dim, kernel_size=3, padding=1).to(device)
+		self.conv1_b = nn.Conv1d(300, enc_hidden_dim, kernel_size=3, padding=1).to(device)
+		self.conv2_b = nn.Conv1d(enc_hidden_dim, enc_hidden_dim, kernel_size=3, padding=1).to(device)
+		self.dropout_val = dropout
+		self.src_max_sentence_len = src_max_sentence_len
+ 
+
+	def forward(self, enc_input, enc_input_lens):
+		enc_input = enc_input.to(device)
+		enc_input_lens = enc_input_lens.to(device)
+		batch_size = enc_input.size()[0]
+		embedded = self.embedding(enc_input)
+		embedded = F.dropout(embedded, self.dropout_val)
+		
+		# 1st net
+		hidden_1_a = self.conv1_a(embedded.transpose(1,2)).transpose(1,2)
+		#print(hidden_1_a.shape)
+		hidden_1_a.contiguous().view(-1, hidden_1_a.size(-1))
+		hidden_1_a = F.leaky_relu(hidden_1_a.contiguous().view(-1, self.enc_embed_dim)
+							   ).view(batch_size, -1, hidden_1_a.size(-1))
+		hidden_2_a = self.conv2_a(hidden_1_a.transpose(1,2)).transpose(1,2)
+		hidden_2_a = F.leaky_relu(hidden_2_a.contiguous().view(-1, hidden_2_a.size(-1))).view(
+													batch_size, -1, hidden_2_a.size(-1))
+		# 2nd net
+		hidden_1_b = self.conv1_a(embedded.transpose(1,2)).transpose(1,2)
+		hidden_1_b.contiguous().view(-1, hidden_1_b.size(-1))
+		hidden_1_b = F.leaky_relu(hidden_1_b.contiguous().view(-1, self.enc_embed_dim)
+							   ).view(batch_size, -1, hidden_1_b.size(-1))
+		hidden_2_b = self.conv2_a(hidden_1_b.transpose(1,2)).transpose(1,2)
+		hidden_2_b = F.leaky_relu(hidden_2_b.contiguous().view(-1, hidden_2_b.size(-1))).view(
+													batch_size, -1, hidden_2_b.size(-1))
+		hidden_2_b = hidden_2_b.view(-1, 2, batch_size, self.enc_hidden_dim)
+		hidden_2_b = hidden_2_b.transpose(0,1)
+
+		hidden_2_b = hidden_2_b[:, 0, :, :].squeeze(dim=1) + hidden_2_b[:, 1, :, :].squeeze(dim=1)
+		
+		return hidden_2_a , hidden_2_b.view(2,batch_size, -1)
