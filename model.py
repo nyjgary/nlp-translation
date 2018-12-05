@@ -366,7 +366,7 @@ class DecoderAttnRNN(nn.Module):
 
 		return output, hidden, attn_weights 
 
-		
+
 class EncoderSimpleRNN_Test(nn.Module):
 
 	""" Vanilla RNN encoder. Sums the bidirectional hidden/output instead of returning twice the hidden dimension """ 
@@ -397,6 +397,7 @@ class EncoderSimpleRNN_Test(nn.Module):
 		embedded = self.embedding(enc_input)
 		embedded = torch.nn.utils.rnn.pack_padded_sequence(embedded, enc_input_lens, batch_first=True)
 		hidden = self.initHidden(batch_size).to(device)
+#		print("hidden initialized is {}".format(hidden.size()))
 		if self.rnn_cell_type == 'gru': 
 			output, hidden = self.rnn(embedded, hidden)
 		elif self.rnn_cell_type == 'lstm': 
@@ -405,19 +406,31 @@ class EncoderSimpleRNN_Test(nn.Module):
 		output, _ = torch.nn.utils.rnn.pad_packed_sequence(output, batch_first=True, 
 														   total_length=self.src_max_sentence_len,
 														   padding_value=RESERVED_TOKENS['<PAD>'])
+#		print("output packed is {}".format(output.size()))
 		output = output.index_select(0, idx_unsort)
 		hidden = hidden.index_select(1, idx_unsort)
 		# print("output left is {} output right is {}".format( output[:, :, :self.enc_hidden_dim].size(), 
 		# 	output[:, :, self.enc_hidden_dim:].size()))
 #		output = output[:, :, :self.enc_hidden_dim] + output[:, :, self.enc_hidden_dim:]
+#		print("output left is {}".format(output[:, :, :self.enc_hidden_dim].size()))
+#		print("output right is {}".format(output[:, :, self.enc_hidden_dim:].size()))
 		output = torch.cat([output[:, :, :self.enc_hidden_dim], output[:, :, self.enc_hidden_dim:]], dim=2)
-		# hidden = hidden.view(self.num_layers, 2, batch_size, self.enc_hidden_dim)
+#		print("after cat output is {}".format(output.size()))
 		hidden = hidden.view(self.num_layers, 2, batch_size, self.enc_hidden_dim)
-		# print("hidden left is {} hidden right is {}".format(hidden[:, 0, :, :].squeeze(dim=1).size(), 
-		# 	hidden[:, 1, :, :].squeeze(dim=1).size()))
+#		print("after view hidden is {}".format(hidden.size()))
+#		print("before squeezing hidden left is {} hidden right is {}".format(
+#			hidden[:, 0, :, :].view(self.num_layers, 1, batch_size, self.enc_hidden_dim).size(), 
+#			hidden[:, 1, :, :].view(self.num_layers, 1, batch_size, self.enc_hidden_dim).size()))
+#		print("after squeezing hidden left is {} hidden right is {}".format(
+#			hidden[:, 0, :, :].view(self.num_layers, 1, batch_size, self.enc_hidden_dim).squeeze(dim=1).size(), 
+#			hidden[:, 1, :, :].view(self.num_layers, 1, batch_size, self.enc_hidden_dim).squeeze(dim=1).size()))
 #		hidden = hidden[:, 0, :, :].squeeze(dim=1) + hidden[:, 1, :, :].squeeze(dim=1)
-		hidden = torch.cat([hidden[:, 0, :, :].squeeze(dim=1), hidden[:, 1, :, :].squeeze(dim=1)], dim=2) 
+#		hidden = torch.cat([hidden[:, 0, :, :].squeeze(dim=1), hidden[:, 1, :, :].squeeze(dim=1)], dim=2) 
+		hidden = torch.cat([hidden[:, 0, :, :].view(self.num_layers, 1, batch_size, self.enc_hidden_dim).squeeze(dim=1), 
+			hidden[:, 1, :, :].view(self.num_layers, 1, batch_size, self.enc_hidden_dim).squeeze(dim=1)], dim=2) 
+#		print("after cat hidden is {}".format(hidden.size()))
 		hidden = hidden.view(self.num_layers, batch_size, 2 * self.enc_hidden_dim)
+#		print("after view hidden is {}".format(hidden.size()))
 
 		return output, hidden
 
