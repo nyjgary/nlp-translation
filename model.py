@@ -182,6 +182,11 @@ class EncoderSimpleRNN(nn.Module):
 		return torch.zeros(2*self.num_layers, batch_size, self.enc_hidden_dim).to(device)
 
 
+
+
+
+
+
 class DecoderRNN(nn.Module):
 
 	""" Vanilla decoder without attention, but final layer from encoder is repeatedly passed as input to each time step. 
@@ -284,48 +289,6 @@ class DecoderSimpleRNN(nn.Module):
 		return output, hidden
 		
 
-# class Attention(nn.Module): 
-	
-# 	""" Implements the attention mechanism by Bahdanau et al. (2015) 
-
-# 		*** TODO *** 
-# 		- Haven't retested after major bug fix. Retry later. 
-# 	"""
-	
-# 	def __init__(self, enc_hidden_dim, dec_hidden_dim, num_annotations, num_layers): 
-# 		super(Attention, self).__init__() 
-# 		self.num_annotations = num_annotations
-# 		self.input_dim = enc_hidden_dim + dec_hidden_dim
-# 		self.attn = nn.Linear(self.input_dim, self.num_annotations).to(device)
-# 		self.v = nn.Parameter(torch.rand(self.num_annotations))
-# 		self.num_layers = num_layers 
-# 		nn.init.normal_(self.v)
-		
-# 	def forward(self, encoder_outputs, last_dec_hidden): 
-# 		# print("Attention module receives encoder outputs of size {} and last_dec_hidden of size {}".format(
-# 		# 	encoder_outputs.size(), last_dec_hidden.size()))
-# 		encoder_outputs, last_dec_hidden = encoder_outputs.to(device), last_dec_hidden.to(device) # [B, S, H], [L, B, H]
-# 		batch_size = encoder_outputs.size()[0]
-# #		print("After transposing 0 <> 1 and subsetting, last_dec_hidden has shape {}".format(last_dec_hidden.transpose(0, 1)[:, -1, :].size()))
-# 		last_dec_hidden = last_dec_hidden.transpose(0, 1)[:, -1, :].unsqueeze(1) # [B, L, H] -> [B, 1, H] -> [B, H] (take last layer)
-# #		print("After unsqueezing, last_dec_hidden has shape {}".format(last_dec_hidden.size())) 
-# 		hidden_broadcast = last_dec_hidden.repeat(1, self.num_annotations, 1).to(device) # [B, S, H]
-# #		print("last_dec_hidden was broadcasted to become size {}".format(hidden_broadcast.size()))
-# 		v_broadcast = self.v.repeat(batch_size, 1, 1).to(device) # [B, 1, S]
-# #		print("v was broadcasted to become size {}".format(v_broadcast.size()))
-# 		concat = torch.cat([encoder_outputs, hidden_broadcast], dim=2).to(device) # [B, S, 2H]
-# #		print("after concating encoder_outputs with hidden_broadcast obtain {}".format(concat.size() ))
-# #		print("applying attention on concat yields {}".format(self.attn(concat).size())) # [B, S, S] *** POSSIBLE ERROR *** 
-# #		print(self.attn(concat))
-# 		energies = v_broadcast.bmm(torch.tanh(self.attn(concat))) # BMM: [B, 1, S] * [B, S, S] = [B, 1, S]
-# #		energies = v_broadcast.bmm(torch.tanh(self.attn(concat)).transpose(1, 2)) # switched order, probably wrong  
-# #		print("bmm-ing with v_broadcast yields {}".format(energies.size()))
-# #		print("applying softmax on second dimension yields {}".format(F.softmax(energies, dim=2).size()))
-# 		attn_weights = F.softmax(energies, dim=2).squeeze(1) # [B, 1, S] -> [B, S]
-# #		print("after squeezing dim 1 we get attention weights {}".format(attn_weights.size()))
-
-# 		return attn_weights
-
 class Attention(nn.Module): 
 	
 	""" Implements the attention mechanism by Bahdanau et al. (2015) 
@@ -402,3 +365,149 @@ class DecoderAttnRNN(nn.Module):
 		output = self.softmax(self.out(output[0].to(device))) # [B, H] -> [B, V] 
 
 		return output, hidden, attn_weights 
+
+		
+class EncoderSimpleRNN_Test(nn.Module):
+
+	""" Vanilla RNN encoder. Sums the bidirectional hidden/output instead of returning twice the hidden dimension """ 
+	
+	def __init__(self, rnn_cell_type, enc_hidden_dim, num_layers, enc_dropout, src_max_sentence_len, pretrained_word2vec):
+		super(EncoderSimpleRNN_Test, self).__init__()
+		self.enc_embed_dim = 300
+		self.enc_hidden_dim = enc_hidden_dim 
+		self.enc_dropout = enc_dropout 
+		self.src_max_sentence_len = src_max_sentence_len
+		self.num_layers = num_layers
+		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True).to(device)
+		self.rnn_cell_type = rnn_cell_type 
+		if self.rnn_cell_type == 'gru': 
+			self.rnn = nn.GRU(input_size=self.enc_embed_dim, hidden_size=self.enc_hidden_dim, num_layers=self.num_layers, 
+				dropout = enc_dropout, batch_first=True, bidirectional=True).to(device)
+		elif self.rnn_cell_type == 'lstm': 
+			self.rnn = nn.LSTM(input_size=self.enc_embed_dim, hidden_size=self.enc_hidden_dim, num_layers=self.num_layers, 
+				dropout = enc_dropout, batch_first=True, bidirectional=True).to(device)
+	
+	def forward(self, enc_input, enc_input_lens):
+		enc_input = enc_input.to(device)
+		enc_input_lens = enc_input_lens.to(device)
+		batch_size = enc_input.size()[0]
+		_, idx_sort = torch.sort(enc_input_lens, dim=0, descending=True)
+		_, idx_unsort = torch.sort(idx_sort, dim=0)
+		enc_input, enc_input_lens = enc_input.index_select(0, idx_sort), enc_input_lens.index_select(0, idx_sort)
+		embedded = self.embedding(enc_input)
+		embedded = torch.nn.utils.rnn.pack_padded_sequence(embedded, enc_input_lens, batch_first=True)
+		hidden = self.initHidden(batch_size).to(device)
+		if self.rnn_cell_type == 'gru': 
+			output, hidden = self.rnn(embedded, hidden)
+		elif self.rnn_cell_type == 'lstm': 
+			memory = self.initHidden(batch_size).to(device)
+			output, (hidden, memory) = self.rnn(embedded, (hidden, memory)) 
+		output, _ = torch.nn.utils.rnn.pad_packed_sequence(output, batch_first=True, 
+														   total_length=self.src_max_sentence_len,
+														   padding_value=RESERVED_TOKENS['<PAD>'])
+		output = output.index_select(0, idx_unsort)
+		hidden = hidden.index_select(1, idx_unsort)
+		# print("output left is {} output right is {}".format( output[:, :, :self.enc_hidden_dim].size(), 
+		# 	output[:, :, self.enc_hidden_dim:].size()))
+#		output = output[:, :, :self.enc_hidden_dim] + output[:, :, self.enc_hidden_dim:]
+		output = torch.cat([output[:, :, :self.enc_hidden_dim], output[:, :, self.enc_hidden_dim:]], dim=2)
+		# hidden = hidden.view(self.num_layers, 2, batch_size, self.enc_hidden_dim)
+		hidden = hidden.view(self.num_layers, 2, batch_size, self.enc_hidden_dim)
+		# print("hidden left is {} hidden right is {}".format(hidden[:, 0, :, :].squeeze(dim=1).size(), 
+		# 	hidden[:, 1, :, :].squeeze(dim=1).size()))
+#		hidden = hidden[:, 0, :, :].squeeze(dim=1) + hidden[:, 1, :, :].squeeze(dim=1)
+		hidden = torch.cat([hidden[:, 0, :, :].squeeze(dim=1), hidden[:, 1, :, :].squeeze(dim=1)], dim=2) 
+		hidden = hidden.view(self.num_layers, batch_size, 2 * self.enc_hidden_dim)
+
+		return output, hidden
+
+	def initHidden(self, batch_size):
+		return torch.zeros(2*self.num_layers, batch_size, self.enc_hidden_dim).to(device)
+
+
+class DecoderAttnRNN_Test(nn.Module):
+
+	""" Decoder with attention (Bahdanau) 
+
+		*** TODO *** 
+		- Haven't retested after major bug fix. Retry later. 
+	""" 
+	
+	def __init__(self, rnn_cell_type, dec_hidden_dim, enc_hidden_dim, num_layers, dec_dropout, targ_vocab_size, src_max_sentence_len, targ_max_sentence_len, pretrained_word2vec):
+		super(DecoderAttnRNN_Test, self).__init__()
+		self.dec_embed_dim = 300
+		self.dec_hidden_dim = dec_hidden_dim 
+		self.enc_hidden_dim = enc_hidden_dim
+		self.src_max_sentence_len = src_max_sentence_len
+		self.targ_max_sentence_len = targ_max_sentence_len
+		self.targ_vocab_size = targ_vocab_size
+		self.num_layers = num_layers 
+		self.rnn_cell_type = rnn_cell_type 
+		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True).to(device)
+		self.attn = Attention_Test(self.enc_hidden_dim, self.dec_hidden_dim, 
+			num_annotations = self.src_max_sentence_len, num_layers=self.num_layers).to(device)
+		if self.rnn_cell_type == 'gru':
+			self.rnn = nn.GRU(self.dec_embed_dim + 2 * self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers, dropout=dec_dropout).to(device)
+		elif self.rnn_cell_type == 'lstm': 
+			self.rnn = nn.LSTM(self.dec_embed_dim + 2 * self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers, dropout=dec_dropout).to(device)
+		# self.gru = nn.GRU(self.dec_embed_dim + self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers, dropout=dec_dropout).to(device)
+		self.out = nn.Linear(self.dec_hidden_dim, self.targ_vocab_size).to(device)
+		self.softmax = nn.LogSoftmax(dim=1).to(device)
+
+	def forward(self, dec_input, dec_hidden, enc_outputs):
+		dec_input, dec_hidden = dec_input.to(device), dec_hidden.to(device) # [B], [L, B, H] 
+#		print("dec_input size is {}. dec_hidden size is {}".format(dec_input.size(), dec_hidden.size()))
+		enc_outputs = enc_outputs.to(device) # [B * T * H] 
+#		print("enc_outputs size is {}".format(enc_outputs.size()))
+		batch_size = dec_input.size()[0]
+		embedded = self.embedding(dec_input).view(1, batch_size, -1) # [1, B, H]
+#		print("embedded size is {}".format(embedded.size()))
+		attn_weights = self.attn(encoder_outputs=enc_outputs, last_dec_hidden=dec_hidden).unsqueeze(1) # [B, 1, T]
+#		print("attn_weights size is {}".format(attn_weights.size()))
+#		print("after bmm, attn_weights becomes context with size {}".format(attn_weights.bmm(enc_outputs).size())) 
+		context = attn_weights.bmm(enc_outputs).transpose(0, 1) # [B, 1, T] * [B, T, H] = [B, 1, H] -> [1, B, H]
+		concat = torch.cat([embedded, context], 2).to(device) # [1, B, 2H] 
+#		print("Embedded {} Context {} Concat {} dec_hidden".format(embedded.size(), context.size(), concat.size(), dec_hidden.size()))
+		if self.rnn_cell_type == 'gru':
+			output, hidden = self.rnn(concat, dec_hidden) # [1, B, H], [2, B, H] 
+		elif self.rnn_cell_type == 'lstm':
+			output, (hidden, memory) = self.rnn(concat, (dec_hidden, dec_hidden))		
+#		output, hidden = self.gru(concat, dec_hidden) # [1, B, H], [2, B, H] 
+		output = self.softmax(self.out(output[0].to(device))) # [B, H] -> [B, V] 
+
+		return output, hidden, attn_weights 
+
+
+class Attention_Test(nn.Module): 
+	
+	""" Implements the attention mechanism by Bahdanau et al. (2015) 
+
+		*** TODO *** 
+		- Haven't retested after major bug fix. Retry later. 
+	"""
+	
+	def __init__(self, enc_hidden_dim, dec_hidden_dim, num_annotations, num_layers): 
+		super(Attention_Test, self).__init__() 
+#		self.num_annotations = num_annotations
+		self.dec_hidden_dim = dec_hidden_dim
+		self.input_dim = 2 * enc_hidden_dim + self.dec_hidden_dim
+		self.attn = nn.Linear(self.input_dim, self.dec_hidden_dim).to(device)
+		self.v = nn.Parameter(torch.rand(self.dec_hidden_dim))
+		self.num_layers = num_layers 
+		nn.init.normal_(self.v, mean=0, std=1. / math.sqrt(self.dec_hidden_dim))
+
+	def forward(self, encoder_outputs, last_dec_hidden): 
+		# print("Attention module receives encoder outputs of size {} and last_dec_hidden of size {}".format(
+		# 	encoder_outputs.size(), last_dec_hidden.size()))
+		time_steps = encoder_outputs.size()[1]
+		encoder_outputs, last_dec_hidden = encoder_outputs.to(device), last_dec_hidden.to(device) # [B, T, H], [L, B, H]
+		batch_size = encoder_outputs.size()[0]
+		v_broadcast = self.v.repeat(batch_size, 1, 1).to(device) # [B, 1, H]
+		last_dec_hidden = last_dec_hidden.transpose(0, 1)[:, -1, :].unsqueeze(1) # [B, L, H] -> [B, 1, H] -> [B, H] (take last layer)
+		hidden_broadcast = last_dec_hidden.repeat(1, time_steps, 1).to(device) # [B, T, H]
+		concat = torch.cat([encoder_outputs, hidden_broadcast], dim=2).to(device) # [B, T, 2H]
+		energies = torch.tanh(self.attn(concat)).transpose(1, 2) # [B, T, H] -> [B, H, T]
+		energies = torch.bmm(v_broadcast, energies).squeeze(1) # [B, 1, H] * [B, H, T] -> [B, 1, T] -> [B, T]
+		attn_weights = F.softmax(energies, dim=1) # [B, T]
+
+		return attn_weights
