@@ -165,7 +165,7 @@ class EncoderDecoder(nn.Module):
 			dec_output = teacher_labels if random.random() < teacher_forcing_ratio else greedy_labels 
 			hypotheses[di] = greedy_labels
 
-		attn_placeholder = Variable(torch.zeros(batch_size, self.targ_max_sentence_len, self.targ_vocab_size))
+		attn_placeholder = Variable(torch.zeros(batch_size, self.targ_max_sentence_len, self.src_max_sentence_len))
 
 		return dec_outputs, hypotheses.transpose(0,1), attn_placeholder 
 
