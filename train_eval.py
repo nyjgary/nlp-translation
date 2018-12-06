@@ -196,47 +196,47 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_grad_max_norm)
             optimizer.step()
             
-            # # evaluate and report loss and bleu scores every 1000 minibatches or end of each epoch
-            # if batch % 1000 == 0 or ((epoch==num_epochs-1) & (batch==len(train_loader_)-1)):
+            # evaluate and report loss and bleu scores every 1000 minibatches or end of each epoch
+            if batch % 1000000 == 0 or ((epoch==num_epochs-1) & (batch==len(train_loader_)-1)):
 
-        # evaluate every epoch 
-        result = {} 
-        result['epoch'] = epoch 
-#        result['epoch'] = epoch + batch / len(train_loader_) 
+                # evaluate every epoch 
+                result = {} 
+        #        result['epoch'] = epoch 
+                result['epoch'] = epoch + batch / len(train_loader_) 
 
-        # calculate metrics on validation set 
-        result['val_loss'], result['val_bleu'], val_hyp_idxs, val_ref_idxs, val_source_idxs, val_hyp_tokens, val_ref_tokens, val_source_tokens, attn = \
-            evaluate(model, dev_loader_, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
-        # calculate metrics on train set (or proxy thereof) only if lazy_eval not set to True 
-        if not lazy_eval: 
-            result['train_loss'], result['train_bleu'], train_hyp_idxs, train_ref_idxs, train_source_idxs, train_hyp_tokens, train_ref_tokens, train_source_tokens, attn = \
-                    evaluate(model, train_loader_proxy, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
-        else: 
-            result['train_loss'], result['train_bleu'] = 0, 0 
+                # calculate metrics on validation set 
+                result['val_loss'], result['val_bleu'], val_hyp_idxs, val_ref_idxs, val_source_idxs, val_hyp_tokens, val_ref_tokens, val_source_tokens, attn = \
+                    evaluate(model, dev_loader_, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
+                # calculate metrics on train set (or proxy thereof) only if lazy_eval not set to True 
+                if not lazy_eval: 
+                    result['train_loss'], result['train_bleu'], train_hyp_idxs, train_ref_idxs, train_source_idxs, train_hyp_tokens, train_ref_tokens, train_source_tokens, attn = \
+                            evaluate(model, train_loader_proxy, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
+                else: 
+                    result['train_loss'], result['train_bleu'] = 0, 0 
 
-        results.append(result)
+                results.append(result)
 
-        if print_intermediate: 
-            print('Epoch: {:.2f}, Train Loss: {:.2f}, Val Loss: {:.2f}, Train BLEU: {:.2f}, Val BLEU: {:.2f}, Minutes Elapsed: {:.2f}'\
-                  .format(result['epoch'], result['train_loss'], result['val_loss'], 
-                          result['train_bleu'], result['val_bleu'], (time.time() - start_time) / 60 ))
-            
-        if inspect_samples is not None: 
-            # sample predictions from training set, if available 
-            if not lazy_eval: 
-                print("Sampling from training predictions...")
-                sample_predictions(train_hyp_idxs, train_ref_idxs, train_source_idxs, train_hyp_tokens, train_ref_tokens, 
-                    train_source_tokens, targ_id2token, attn, print_attn=print_attn, num_samples=inspect_samples)
-            # sample predictions from validation set 
-            print("Sampling from val predictions...")
-            sample_predictions(val_hyp_idxs, val_ref_idxs, val_source_idxs, val_hyp_tokens, val_ref_tokens, val_source_tokens, 
-                targ_id2token, attn, print_attn=print_attn, num_samples=inspect_samples)
-            
-        if save_checkpoint: 
-            if result['val_loss'] == pd.DataFrame.from_dict(results)['val_loss'].min(): 
-                checkpoint_fp = 'model_checkpoints/{}.pth.tar'.format(model_name)
-                check_dir_exists(filename=checkpoint_fp)
-                torch.save(model.state_dict(), checkpoint_fp)
+                if print_intermediate: 
+                    print('Epoch: {:.2f}, Train Loss: {:.2f}, Val Loss: {:.2f}, Train BLEU: {:.2f}, Val BLEU: {:.2f}, Minutes Elapsed: {:.2f}'\
+                          .format(result['epoch'], result['train_loss'], result['val_loss'], 
+                                  result['train_bleu'], result['val_bleu'], (time.time() - start_time) / 60 ))
+                    
+                if inspect_samples is not None: 
+                    # sample predictions from training set, if available 
+                    if not lazy_eval: 
+                        print("Sampling from training predictions...")
+                        sample_predictions(train_hyp_idxs, train_ref_idxs, train_source_idxs, train_hyp_tokens, train_ref_tokens, 
+                            train_source_tokens, targ_id2token, attn, print_attn=print_attn, num_samples=inspect_samples)
+                    # sample predictions from validation set 
+                    print("Sampling from val predictions...")
+                    sample_predictions(val_hyp_idxs, val_ref_idxs, val_source_idxs, val_hyp_tokens, val_ref_tokens, val_source_tokens, 
+                        targ_id2token, attn, print_attn=print_attn, num_samples=inspect_samples)
+                    
+                if save_checkpoint: 
+                    if result['val_loss'] == pd.DataFrame.from_dict(results)['val_loss'].min(): 
+                        checkpoint_fp = 'model_checkpoints/{}.pth.tar'.format(model_name)
+                        check_dir_exists(filename=checkpoint_fp)
+                        torch.save(model.state_dict(), checkpoint_fp)
  
     runtime = (time.time() - start_time) / 60 
     dt_created = datetime.now().strftime('%Y-%m-%d %H:%M:%S')               
