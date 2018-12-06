@@ -491,6 +491,64 @@ class DecoderAttnRNN_Test(nn.Module):
 		return output, hidden, attn_weights 
 
 
+class DecoderRNN_Test(nn.Module):
+
+	""" Decoder with attention (Bahdanau) 
+
+		*** TODO *** 
+		- Haven't retested after major bug fix. Retry later. 
+	""" 
+	
+	def __init__(self, rnn_cell_type, attn, dec_hidden_dim, enc_hidden_dim, num_layers, dec_dropout, targ_vocab_size, src_max_sentence_len, targ_max_sentence_len, pretrained_word2vec):
+		super(DecoderRNN_Test, self).__init__()
+		self.dec_embed_dim = 300
+		self.dec_hidden_dim = dec_hidden_dim 
+		self.enc_hidden_dim = enc_hidden_dim
+		self.src_max_sentence_len = src_max_sentence_len
+		self.targ_max_sentence_len = targ_max_sentence_len
+		self.targ_vocab_size = targ_vocab_size
+		self.num_layers = num_layers 
+		self.rnn_cell_type = rnn_cell_type 
+		self.attn = attn
+		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True).to(device)
+		if self.attn: 
+			self.attn = Attention_Test(self.enc_hidden_dim, self.dec_hidden_dim, 
+				num_annotations = self.src_max_sentence_len, num_layers=self.num_layers).to(device)
+		if self.rnn_cell_type == 'gru':
+			self.rnn = nn.GRU(self.dec_embed_dim + 2 * self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers, dropout=dec_dropout).to(device)
+		elif self.rnn_cell_type == 'lstm': 
+			self.rnn = nn.LSTM(self.dec_embed_dim + 2 * self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers, dropout=dec_dropout).to(device)
+		# self.gru = nn.GRU(self.dec_embed_dim + self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers, dropout=dec_dropout).to(device)
+		self.out = nn.Linear(self.dec_hidden_dim, self.targ_vocab_size).to(device)
+		self.softmax = nn.LogSoftmax(dim=1).to(device)
+
+	def forward(self, dec_input, dec_hidden, enc_outputs):
+		dec_input, dec_hidden = dec_input.to(device), dec_hidden.to(device) # [B], [L, B, H] 
+#		print("dec_input size is {}. dec_hidden size is {}".format(dec_input.size(), dec_hidden.size()))
+		enc_outputs = enc_outputs.to(device) # [B * T * H] 
+#		print("enc_outputs size is {}".format(enc_outputs.size()))
+		batch_size = dec_input.size()[0]
+		embedded = self.embedding(dec_input).view(1, batch_size, -1) # [1, B, H]
+#		print("embedded size is {}".format(embedded.size()))
+		if self.attn: 
+			attn_weights = self.attn(encoder_outputs=enc_outputs, last_dec_hidden=dec_hidden).unsqueeze(1) # [B, 1, T]
+	#		print("attn_weights size is {}".format(attn_weights.size()))
+	#		print("after bmm, attn_weights becomes context with size {}".format(attn_weights.bmm(enc_outputs).size())) 
+			context = attn_weights.bmm(enc_outputs).transpose(0, 1) # [B, 1, T] * [B, T, H] = [B, 1, H] -> [1, B, H]
+		else: 
+			context = enc_outputs[:, -1, :].unsqueeze(dim=1).transpose(0, 1) 
+		concat = torch.cat([embedded, context], 2).to(device) # [1, B, 2H] 
+#		print("Embedded {} Context {} Concat {} dec_hidden".format(embedded.size(), context.size(), concat.size(), dec_hidden.size()))
+		if self.rnn_cell_type == 'gru':
+			output, hidden = self.rnn(concat, dec_hidden) # [1, B, H], [2, B, H] 
+		elif self.rnn_cell_type == 'lstm':
+			output, (hidden, memory) = self.rnn(concat, (dec_hidden, dec_hidden))		
+#		output, hidden = self.gru(concat, dec_hidden) # [1, B, H], [2, B, H] 
+		output = self.softmax(self.out(output[0].to(device))) # [B, H] -> [B, V] 
+
+		return output, hidden, attn_weights 
+
+
 class Attention_Test(nn.Module): 
 	
 	""" Implements the attention mechanism by Bahdanau et al. (2015) 
