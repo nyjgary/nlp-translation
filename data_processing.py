@@ -162,11 +162,15 @@ def process_data(src_lang, targ_lang, src_max_sentence_len, targ_max_sentence_le
     
     # for training data, keep only pairs with both source and target sentences within max_sent_len 
     if filter_long: 
+        original_train_size = len(data['train']['source']['tokens'])
         source_lengths = np.array([len(l) for l in data['train']['source']['tokens']])
         target_lengths = np.array([len(l) for l in data['train']['target']['tokens']])
         keep_mask = (source_lengths <= src_max_sentence_len) & (target_lengths <= targ_max_sentence_len)
         data['train']['source']['tokens'] = list(np.array(data['train']['source']['tokens'])[keep_mask])
         data['train']['target']['tokens'] = list(np.array(data['train']['target']['tokens'])[keep_mask])
+        new_train_size = len(data['train']['source']['tokens']) 
+        print("{} data points are removed from training data after filtering out long sentences: {} remain.".format(
+            new_train_size - original_train_size, new_train_size))
 
     # further limit number of samples if applicable 
     if sample_limit is not None: 
