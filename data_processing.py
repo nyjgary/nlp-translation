@@ -142,7 +142,7 @@ def generate_vocab(src_lang, targ_lang, src_vocab_size, targ_vocab_size):
     return vocab 
 
 
-def process_data(src_lang, targ_lang, vocab, sample_limit=None): 
+def process_data(src_lang, targ_lang, src_max_sentence_len, targ_max_sentence_len, vocab, sample_limit=None, filter_long=True): 
     """ - Main function that takes source and target language names, vocab dict generated, 
         and an optional sample_limit representing the number of sentences to subset if necessary. 
         - Returns data as a nested dictionary containing the indices and tokens of train/dev/test data 
@@ -158,15 +158,28 @@ def process_data(src_lang, targ_lang, vocab, sample_limit=None):
     for split in ['train', 'dev', 'test']: 
         for lang_type in ['source', 'target']: 
             # read in tokens 
-            tokens = text2tokens(data[split][lang_type]['filepath'], lang_type)
-            if sample_limit is not None: 
-                tokens = tokens[:sample_limit]
-            # convert tokens to indices 
-            indices = tokens2indices(tokens, vocab[data['languages'][lang_type]]['token2id'])
-            # save to dictionary 
-            data[split][lang_type]['tokens'] = tokens
-            data[split][lang_type]['indices'] = indices
-            
+            data[split][lang_type]['tokens'] = text2tokens(data[split][lang_type]['filepath'], lang_type)
+    
+    # for training data, keep only pairs with both source and target sentences within max_sent_len 
+    if filter_long: 
+        source_lengths = np.array([len(l) for l in data['train']['source']['tokens']])
+        target_lengths = np.array([len(l) for l in data['train']['target']['tokens']])
+        keep_mask = (source_lengths <= src_max_sentence_len) & (target_lengths <= targ_max_sentence_len)
+        data['train']['source']['tokens'] = list(np.array(data['train']['source']['tokens'])[keep_mask])
+        data['train']['target']['tokens'] = list(np.array(data['train']['target']['tokens'])[keep_mask])
+
+    # further limit number of samples if applicable 
+    if sample_limit is not None: 
+        for split in ['train', 'dev', 'test']: 
+            for lang_type in ['source', 'target']: 
+                data[split][lang_type]['tokens'] = data[split][lang_type]['tokens'][:sample_limit]
+
+    # convert tokens to indices 
+    for split in ['train', 'dev', 'test']: 
+        for lang_type in ['source', 'target']: 
+            data[split][lang_type]['indices'] = tokens2indices(tokens_data=data[split][lang_type]['tokens'],  
+                token2id = vocab[data['languages'][lang_type]]['token2id'])
+
     return data
 
 
@@ -237,4 +250,33 @@ def create_dataloaders(processed_data, src_max_sentence_len, targ_max_sentence_l
         loaders[split] = DataLoader(dataset, batch_size=batch_size, shuffle=False, 
                                     collate_fn=partial(collate_func, src_max_sentence_len, targ_max_sentence_len))
     return loaders 
+
+
+### OLD CODE ### 
+
+# def process_data(src_lang, targ_lang, vocab, sample_limit=None): 
+#     """ - Main function that takes source and target language names, vocab dict generated, 
+#         and an optional sample_limit representing the number of sentences to subset if necessary. 
+#         - Returns data as a nested dictionary containing the indices and tokens of train/dev/test data 
+#         for both source and target languages. 
+#         - Note the hierachy of data dict is: data[split][lang_type]['tokens' or 'indices'], 
+#         e.g. to access indices of source training data, use data['train']['source']['indices']
+#     """ 
     
+#     # get filepaths 
+#     data = get_filepaths(src_lang, targ_lang)
+    
+#     # loop through each file, read in text, convert to tokens, then to indices 
+#     for split in ['train', 'dev', 'test']: 
+#         for lang_type in ['source', 'target']: 
+#             # read in tokens 
+#             tokens = text2tokens(data[split][lang_type]['filepath'], lang_type)
+#             if sample_limit is not None: 
+#                 tokens = tokens[:sample_limit]
+#             # convert tokens to indices 
+#             indices = tokens2indices(tokens, vocab[data['languages'][lang_type]]['token2id'])
+#             # save to dictionary 
+#             data[split][lang_type]['tokens'] = tokens
+#             data[split][lang_type]['indices'] = indices
+            
+#     return data
