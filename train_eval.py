@@ -136,7 +136,7 @@ def evaluate(model, loader, src_id2token, targ_id2token, teacher_forcing_ratio):
 
 
 def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, params, vocab, 
-    lazy_eval=True, print_intermediate=True, save_checkpoint=True, save_to_log=True, inspect_samples=None, print_attn=False): # previously train_and_eval_attn
+    lazy_eval=True, print_intermediate=1000000, save_checkpoint=True, save_to_log=True, inspect_samples=None, print_attn=False): # previously train_and_eval_attn
     
     """ Main function to train and evaluate model: takes a model, loaders, and a bunch of parameters and 
         returns trained model along with a results dict storing epoch, train/val loss, and train/val bleu scores. 
@@ -144,7 +144,7 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
         Note that: 
         - lazy_train = train and validate only on a single mini batch (for quick prototyping) 
         - lazy_eval = skip evaluation on train set altogether (not even the 1K proxy) 
-        - print_intermediate = reports loss and bleu scores every 1000 minibatches or end of each epoch 
+        - print_intermediate = reports loss and bleu scores every 'print_intermediate' minibatches or end of each epoch 
         - save_checkpoint = saves model's state dict into a .pth.tar file named after model_name 
         - save_to_log = 
         - inspect_samples = specify number of samples to print out every 1K batches 
@@ -197,7 +197,7 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
             optimizer.step()
             
             # evaluate and report loss and bleu scores every 1000 minibatches or end of each epoch
-            if batch % 1000000 == 0 or ((epoch==num_epochs-1) & (batch==len(train_loader_)-1)):
+            if batch % print_intermediate == 0 or ((epoch==num_epochs-1) & (batch==len(train_loader_)-1)):
 
                 # evaluate every epoch 
                 result = {} 
@@ -216,10 +216,9 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
 
                 results.append(result)
 
-                if print_intermediate: 
-                    print('Epoch: {:.2f}, Train Loss: {:.2f}, Val Loss: {:.2f}, Train BLEU: {:.2f}, Val BLEU: {:.2f}, Minutes Elapsed: {:.2f}'\
-                          .format(result['epoch'], result['train_loss'], result['val_loss'], 
-                                  result['train_bleu'], result['val_bleu'], (time.time() - start_time) / 60 ))
+                print('Epoch: {:.2f}, Train Loss: {:.2f}, Val Loss: {:.2f}, Train BLEU: {:.2f}, Val BLEU: {:.2f}, Minutes Elapsed: {:.2f}'\
+                      .format(result['epoch'], result['train_loss'], result['val_loss'], 
+                              result['train_bleu'], result['val_bleu'], (time.time() - start_time) / 60 ))
                     
                 if inspect_samples is not None: 
                     # sample predictions from training set, if available 
