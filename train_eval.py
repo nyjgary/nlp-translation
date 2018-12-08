@@ -187,15 +187,20 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
         for batch, (src_idxs, targ_idxs, src_lens, targ_lens) in enumerate(train_loader_):
             DEBUG_START = time.time() 
             src_idxs, targ_idxs, src_lens, targ_lens = src_idxs.to(device), targ_idxs.to(device), src_lens.to(device), targ_lens.to(device)
+            print("targ_idxs type {}".format(type(targ_idxs)))
             model.train()
             optimizer.zero_grad()
             final_outputs, hypotheses, attn_weights = model(src_idxs, targ_idxs, src_lens, targ_lens, teacher_forcing_ratio=teacher_forcing_ratio) 
             print("Finished forward pass at {}s".format(time.time() - DEBUG_START))
             # attn_weights = attn_weights[:,1:]
             final_outputs = final_outputs[1:].transpose(0, 1)
+            print("final_outputs type {}".format(type(final_outputs)))
             targets = targ_idxs[:,1:]
+            print("targets type {}".format(type(targets)))
             outputs_for_nll = final_outputs.contiguous().view(-1, model.decoder.targ_vocab_size)
+            print("outputs_for_nll type {}".format(type(outputs_for_nll)))
             targets_for_nll = targets.contiguous().view(-1)
+            print("targets_for_nll type {}".format(type(targets_for_nll)))
             loss = criterion(outputs_for_nll, targets_for_nll)
             print("Finished loss calc at {}s".format(time.time() - DEBUG_START))
             loss.backward()
