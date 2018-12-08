@@ -40,14 +40,14 @@ class EncoderRNN(nn.Module): # previously EncoderSimpleRNN_Test
 		self.enc_dropout = enc_dropout 
 		self.src_max_sentence_len = src_max_sentence_len
 		self.num_layers = num_layers
-		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True).to(device)
+		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True) #.to(device)
 		self.rnn_cell_type = rnn_cell_type 
 		if self.rnn_cell_type == 'gru': 
 			self.rnn = nn.GRU(input_size=self.enc_embed_dim, hidden_size=self.enc_hidden_dim, num_layers=self.num_layers, 
-				dropout = enc_dropout, batch_first=True, bidirectional=True).to(device)
+				dropout = enc_dropout, batch_first=True, bidirectional=True) #.to(device)
 		elif self.rnn_cell_type == 'lstm': 
 			self.rnn = nn.LSTM(input_size=self.enc_embed_dim, hidden_size=self.enc_hidden_dim, num_layers=self.num_layers, 
-				dropout = enc_dropout, batch_first=True, bidirectional=True).to(device)
+				dropout = enc_dropout, batch_first=True, bidirectional=True) #.to(device)
 	
 	def forward(self, enc_input, enc_input_lens):
 		enc_input = enc_input.to(device)
@@ -58,11 +58,11 @@ class EncoderRNN(nn.Module): # previously EncoderSimpleRNN_Test
 		enc_input, enc_input_lens = enc_input.index_select(0, idx_sort), enc_input_lens.index_select(0, idx_sort)
 		embedded = self.embedding(enc_input)
 		embedded = torch.nn.utils.rnn.pack_padded_sequence(embedded, enc_input_lens, batch_first=True)
-		hidden = self.initHidden(batch_size).to(device)
+		hidden = self.initHidden(batch_size) #.to(device)
 		if self.rnn_cell_type == 'gru': 
 			output, hidden = self.rnn(embedded, hidden)
 		elif self.rnn_cell_type == 'lstm': 
-			memory = self.initHidden(batch_size).to(device)
+			memory = self.initHidden(batch_size) #.to(device)
 			output, (hidden, memory) = self.rnn(embedded, (hidden, memory)) 
 		output, _ = torch.nn.utils.rnn.pad_packed_sequence(output, batch_first=True, 
 														   total_length=self.src_max_sentence_len,
@@ -97,10 +97,10 @@ class DecoderRNN(nn.Module): # previously DecoderRNNV2
 		self.targ_vocab_size = targ_vocab_size
 		self.targ_max_sentence_len = targ_max_sentence_len
 		self.num_layers = num_layers
-		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True).to(device)
-		self.gru = nn.GRU(self.dec_embed_dim + 2 * self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers).to(device)
-		self.out = nn.Linear(dec_hidden_dim, self.targ_vocab_size).to(device)
-		self.softmax = nn.LogSoftmax(dim=1).to(device)
+		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True) #.to(device)
+		self.gru = nn.GRU(self.dec_embed_dim + 2 * self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers) #.to(device)
+		self.out = nn.Linear(dec_hidden_dim, self.targ_vocab_size) #.to(device)
+		self.softmax = nn.LogSoftmax(dim=1) #.to(device)
 
 	def forward(self, dec_input, dec_hidden, enc_outputs): 
 		dec_input = dec_input.to(device)
@@ -111,9 +111,9 @@ class DecoderRNN(nn.Module): # previously DecoderRNNV2
 #		context = enc_outputs[:, -1, :].unsqueeze(dim=1).transpose(0, 1) 
 		context = torch.cat([enc_outputs[:, -1, :self.enc_hidden_dim], 
 							 enc_outputs[:, 0, self.enc_hidden_dim:]], dim=1).unsqueeze(0)
-		concat = torch.cat([embedded, context], 2).to(device)
+		concat = torch.cat([embedded, context], 2) #.to(device)
 		output, hidden = self.gru(concat, dec_hidden)
-		output = self.softmax(self.out(output[0].to(device)))    
+		output = self.softmax(self.out(output[0])) #.to(device)))    
 		return output, hidden
 
 
@@ -161,7 +161,7 @@ class Attention(nn.Module):
 		super(Attention, self).__init__() 
 		self.dec_hidden_dim = dec_hidden_dim
 		self.input_dim = 2 * enc_hidden_dim + self.dec_hidden_dim
-		self.attn = nn.Linear(self.input_dim, self.dec_hidden_dim).to(device)
+		self.attn = nn.Linear(self.input_dim, self.dec_hidden_dim) #.to(device)
 		self.v = nn.Parameter(torch.rand(self.dec_hidden_dim))
 		self.num_layers = num_layers 
 		nn.init.normal_(self.v, mean=0, std=1. / math.sqrt(self.dec_hidden_dim))
@@ -170,10 +170,10 @@ class Attention(nn.Module):
 		time_steps = encoder_outputs.size()[1]
 		encoder_outputs, last_dec_hidden = encoder_outputs.to(device), last_dec_hidden.to(device) # [B, T, H], [L, B, H]
 		batch_size = encoder_outputs.size()[0]
-		v_broadcast = self.v.repeat(batch_size, 1, 1).to(device) # [B, 1, H]
+		v_broadcast = self.v.repeat(batch_size, 1, 1) #.to(device) # [B, 1, H]
 		last_dec_hidden = last_dec_hidden.transpose(0, 1)[:, -1, :].unsqueeze(1) # [B, L, H] -> [B, 1, H] -> [B, H] (take last layer)
-		hidden_broadcast = last_dec_hidden.repeat(1, time_steps, 1).to(device) # [B, T, H]
-		concat = torch.cat([encoder_outputs, hidden_broadcast], dim=2).to(device) # [B, T, 2H]
+		hidden_broadcast = last_dec_hidden.repeat(1, time_steps, 1) #.to(device) # [B, T, H]
+		concat = torch.cat([encoder_outputs, hidden_broadcast], dim=2) #.to(device) # [B, T, 2H]
 		energies = torch.tanh(self.attn(concat)).transpose(1, 2) # [B, T, H] -> [B, H, T]
 		energies = torch.bmm(v_broadcast, energies).squeeze(1) # [B, 1, H] * [B, H, T] -> [B, 1, T] -> [B, T]
 		energies.data.masked_fill_(src_idx == RESERVED_TOKENS['<PAD>'], -float('inf'))
@@ -219,23 +219,23 @@ class DecoderAttnRNN(nn.Module):
 		self.targ_vocab_size = targ_vocab_size
 		self.num_layers = num_layers 
 		self.rnn_cell_type = rnn_cell_type 
-		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True).to(device)
+		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True) #.to(device)
 		# choose attention type 
 		if attention_type == 'additive': 
 			self.attn = Attention(self.enc_hidden_dim, self.dec_hidden_dim, 
-				num_annotations = self.src_max_sentence_len, num_layers=self.num_layers).to(device)
+				num_annotations = self.src_max_sentence_len, num_layers=self.num_layers) #.to(device)
 			print("Using additive attention...")
 		elif attention_type == 'multiplicative': 
 			self.attn = DotAttention(self.enc_hidden_dim, self.dec_hidden_dim, 
-			num_annotations = self.src_max_sentence_len, num_layers=self.num_layers).to(device)
+			num_annotations = self.src_max_sentence_len, num_layers=self.num_layers) #.to(device)
 		# choose RNN cell type 
 		if self.rnn_cell_type == 'gru':
-			self.rnn = nn.GRU(self.dec_embed_dim + 2 * self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers, dropout=dec_dropout).to(device)
+			self.rnn = nn.GRU(self.dec_embed_dim + 2 * self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers, dropout=dec_dropout) #.to(device)
 		elif self.rnn_cell_type == 'lstm': 
-			self.rnn = nn.LSTM(self.dec_embed_dim + 2 * self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers, dropout=dec_dropout).to(device)
+			self.rnn = nn.LSTM(self.dec_embed_dim + 2 * self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers, dropout=dec_dropout) #.to(device)
 		# self.gru = nn.GRU(self.dec_embed_dim + self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers, dropout=dec_dropout).to(device)
-		self.out = nn.Linear(self.dec_hidden_dim, self.targ_vocab_size).to(device)
-		self.softmax = nn.LogSoftmax(dim=1).to(device)
+		self.out = nn.Linear(self.dec_hidden_dim, self.targ_vocab_size) #.to(device)
+		self.softmax = nn.LogSoftmax(dim=1) #.to(device)
 
 	def forward(self, dec_input, dec_hidden, enc_outputs, src_idx):
 		dec_input, dec_hidden = dec_input.to(device), dec_hidden.to(device) # [B], [L, B, H] 
@@ -244,12 +244,12 @@ class DecoderAttnRNN(nn.Module):
 		embedded = self.embedding(dec_input).view(1, batch_size, -1) # [1, B, H]
 		attn_weights = self.attn(encoder_outputs=enc_outputs, last_dec_hidden=dec_hidden, src_idx=src_idx).unsqueeze(1) # [B, 1, T]
 		context = attn_weights.bmm(enc_outputs).transpose(0, 1) # [B, 1, T] * [B, T, H] = [B, 1, H] -> [1, B, H]
-		concat = torch.cat([embedded, context], 2).to(device) # [1, B, 2H] 
+		concat = torch.cat([embedded, context], 2) #.to(device) # [1, B, 2H] 
 		if self.rnn_cell_type == 'gru':
 			output, hidden = self.rnn(concat, dec_hidden) # [1, B, H], [2, B, H] 
 		elif self.rnn_cell_type == 'lstm':
 			output, (hidden, memory) = self.rnn(concat, (dec_hidden, dec_hidden))		
-		output = self.softmax(self.out(output[0].to(device))) # [B, H] -> [B, V] 
+		output = self.softmax(self.out(output[0])) #.to(device))) # [B, H] -> [B, V] 
 
 		return output, hidden, attn_weights 
 
