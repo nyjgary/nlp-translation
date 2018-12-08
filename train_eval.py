@@ -199,6 +199,8 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
             # evaluate and report loss and bleu scores every 1000 minibatches or end of each epoch
             if batch % print_intermediate == 0 or ((epoch==num_epochs-1) & (batch==len(train_loader_)-1)):
 
+                print("Finished gradient updates at {}".format(time.time() - start_time))
+
                 # evaluate every epoch 
                 result = {} 
         #        result['epoch'] = epoch 
@@ -207,6 +209,9 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
                 # calculate metrics on validation set 
                 result['val_loss'], result['val_bleu'], val_hyp_idxs, val_ref_idxs, val_source_idxs, val_hyp_tokens, val_ref_tokens, val_source_tokens, attn = \
                     evaluate(model, dev_loader_, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
+
+                print("Evaluated on validation set at {} seconds".format(time.time() - start_time))                
+
                 # calculate metrics on train set (or proxy thereof) only if lazy_eval not set to True 
                 if not lazy_eval: 
                     result['train_loss'], result['train_bleu'], train_hyp_idxs, train_ref_idxs, train_source_idxs, train_hyp_tokens, train_ref_tokens, train_source_tokens, attn = \
@@ -214,7 +219,11 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
                 else: 
                     result['train_loss'], result['train_bleu'] = 0, 0 
 
+                print("Evaluated on training set at {} seconds".format(time.time() - start_time))    
+
                 results.append(result)
+
+                print("Appended results at {} seconds".format(time.time() - start_time))
 
                 print('Epoch: {:.2f}, Train Loss: {:.2f}, Val Loss: {:.2f}, Train BLEU: {:.2f}, Val BLEU: {:.2f}, Minutes Elapsed: {:.2f}'\
                       .format(result['epoch'], result['train_loss'], result['val_loss'], 
@@ -230,18 +239,22 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
                     print("Sampling from val predictions...")
                     sample_predictions(val_hyp_idxs, val_ref_idxs, val_source_idxs, val_hyp_tokens, val_ref_tokens, val_source_tokens, 
                         targ_id2token, attn, print_attn=print_attn, num_samples=inspect_samples)
+
+                    print("Inspect samples at {} seconds".format(time.time() - start_time))
                     
                 if save_checkpoint: 
                     if result['val_loss'] == pd.DataFrame.from_dict(results)['val_loss'].min(): 
                         checkpoint_fp = 'model_checkpoints/{}.pth.tar'.format(model_name)
                         check_dir_exists(filename=checkpoint_fp)
                         torch.save(model.state_dict(), checkpoint_fp)
+                    print("Saved checkpoint at {} seconds".format(time.time() - start_time))
  
     runtime = (time.time() - start_time) / 60 
     dt_created = datetime.now().strftime('%Y-%m-%d %H:%M:%S')               
 
     if save_to_log: 
         append_to_log(params, results, runtime, model_name, dt_created)
+        print("Appended to log at {} seconds".format(time.time() - start_time))
 
     print("Experiment completed in {} minutes with {:.2f} best validation loss and {:.2f} best validation BLEU.".format(
         int(runtime), pd.DataFrame.from_dict(results)['val_loss'].min(), 
