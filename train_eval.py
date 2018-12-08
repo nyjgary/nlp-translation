@@ -109,8 +109,8 @@ def evaluate(model, loader, src_id2token, targ_id2token, teacher_forcing_ratio):
         outputs = outputs[1:].transpose(0, 1)
         targets = targ_idxs[:,1:]
         attn_weights = attn_weights[:,1:]
-        outputs_for_nll = outputs.contiguous().view(-1, model.decoder.targ_vocab_size)
-        targets_for_nll = targets.contiguous().view(-1)
+        outputs_for_nll = outputs.contiguous().view(-1, model.decoder.targ_vocab_size).to(device)
+        targets_for_nll = targets.contiguous().view(-1).to(device)
         loss = F.nll_loss(outputs_for_nll, targets_for_nll, ignore_index=RESERVED_TOKENS['<PAD>'])        
         total_loss += loss.item()  
 
