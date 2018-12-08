@@ -207,14 +207,14 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
                 result['epoch'] = epoch + batch / len(train_loader_) 
 
                 # calculate metrics on validation set 
-                result['val_loss'], result['val_bleu'], val_hyp_idxs, val_ref_idxs, val_source_idxs, val_hyp_tokens, val_ref_tokens, val_source_tokens, attn = \
+                result['val_loss'], result['val_bleu'], val_hyp_idxs, val_ref_idxs, val_source_idxs, val_hyp_tokens, val_ref_tokens, val_source_tokens, val_attn = \
                     evaluate(model, dev_loader_, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
 
                 print("Evaluated on validation set at {} seconds".format(time.time() - start_time))                
 
                 # calculate metrics on train set (or proxy thereof) only if lazy_eval not set to True 
                 if not lazy_eval: 
-                    result['train_loss'], result['train_bleu'], train_hyp_idxs, train_ref_idxs, train_source_idxs, train_hyp_tokens, train_ref_tokens, train_source_tokens, attn = \
+                    result['train_loss'], result['train_bleu'], train_hyp_idxs, train_ref_idxs, train_source_idxs, train_hyp_tokens, train_ref_tokens, train_source_tokens, train_attn = \
                             evaluate(model, train_loader_proxy, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
                 else: 
                     result['train_loss'], result['train_bleu'] = 0, 0 
@@ -234,11 +234,11 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
                     if not lazy_eval: 
                         print("Sampling from training predictions...")
                         sample_predictions(train_hyp_idxs, train_ref_idxs, train_source_idxs, train_hyp_tokens, train_ref_tokens, 
-                            train_source_tokens, targ_id2token, attn, print_attn=print_attn, num_samples=inspect_samples)
+                            train_source_tokens, targ_id2token, train_attn, print_attn=print_attn, num_samples=inspect_samples)
                     # sample predictions from validation set 
                     print("Sampling from val predictions...")
                     sample_predictions(val_hyp_idxs, val_ref_idxs, val_source_idxs, val_hyp_tokens, val_ref_tokens, val_source_tokens, 
-                        targ_id2token, attn, print_attn=print_attn, num_samples=inspect_samples)
+                        targ_id2token, val_attn, print_attn=print_attn, num_samples=inspect_samples)
 
                     print("Inspect samples at {} seconds".format(time.time() - start_time))
                     
