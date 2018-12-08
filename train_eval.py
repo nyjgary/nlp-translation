@@ -46,7 +46,8 @@ def tensor2corpus(tensor, id2token):
     """ Takes a tensor representing a batch of sentences (size: batch_size * max_sentence_length), and returns 
         its token equivalent (as list of tokens) """ 
     
-    list_of_lists = tensor.numpy().astype(int).tolist()
+#    list_of_lists = tensor.numpy().astype(int).tolist()
+    list_of_lists = tensor.cpu().numpy().astype(int).tolist()
     to_token = lambda l: [id2token[idx] for idx in l]
     corpus = [to_token(l) for l in list_of_lists] 
  
