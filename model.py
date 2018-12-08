@@ -50,8 +50,8 @@ class EncoderRNN(nn.Module): # previously EncoderSimpleRNN_Test
 				dropout = enc_dropout, batch_first=True, bidirectional=True) #.to(device)
 	
 	def forward(self, enc_input, enc_input_lens):
-		enc_input = enc_input.to(device)
-		enc_input_lens = enc_input_lens.to(device)
+#		enc_input = enc_input.to(device)
+#		enc_input_lens = enc_input_lens.to(device)
 		batch_size = enc_input.size()[0]
 		_, idx_sort = torch.sort(enc_input_lens, dim=0, descending=True)
 		_, idx_unsort = torch.sort(idx_sort, dim=0)
@@ -103,9 +103,9 @@ class DecoderRNN(nn.Module): # previously DecoderRNNV2
 		self.softmax = nn.LogSoftmax(dim=1) #.to(device)
 
 	def forward(self, dec_input, dec_hidden, enc_outputs): 
-		dec_input = dec_input.to(device)
-		dec_hidden = dec_hidden.to(device)
-		enc_outputs = enc_outputs.to(device)
+		dec_input = dec_input #.to(device)
+		dec_hidden = dec_hidden #.to(device)
+		enc_outputs = enc_outputs #.to(device)
 		batch_size = dec_input.size()[0]
 		embedded = self.embedding(dec_input).view(1, batch_size, -1)	
 #		context = enc_outputs[:, -1, :].unsqueeze(dim=1).transpose(0, 1) 
@@ -131,8 +131,8 @@ class EncoderDecoder(nn.Module):
 
 	def forward(self, src_idx, targ_idx, src_lens, targ_lens, teacher_forcing_ratio): 
 		
-		src_idx, targ_idx = src_idx.to(device), targ_idx.to(device) 
-		src_lens, targ_lens = src_lens.to(device), targ_lens.to(device)
+		# src_idx, targ_idx = src_idx.to(device), targ_idx.to(device) 
+		# src_lens, targ_lens = src_lens.to(device), targ_lens.to(device)
 		batch_size = src_idx.size()[0]
 		enc_outputs, enc_hidden = self.encoder(src_idx, src_lens)
 		dec_hidden = enc_hidden 
@@ -168,7 +168,7 @@ class Attention(nn.Module):
 
 	def forward(self, encoder_outputs, last_dec_hidden, src_idx): 
 		time_steps = encoder_outputs.size()[1]
-		encoder_outputs, last_dec_hidden = encoder_outputs.to(device), last_dec_hidden.to(device) # [B, T, H], [L, B, H]
+#		encoder_outputs, last_dec_hidden = encoder_outputs.to(device), last_dec_hidden.to(device) # [B, T, H], [L, B, H]
 		batch_size = encoder_outputs.size()[0]
 		v_broadcast = self.v.repeat(batch_size, 1, 1) #.to(device) # [B, 1, H]
 		last_dec_hidden = last_dec_hidden.transpose(0, 1)[:, -1, :].unsqueeze(1) # [B, L, H] -> [B, 1, H] -> [B, H] (take last layer)
@@ -193,7 +193,7 @@ class DotAttention(nn.Module):
 
 	def forward(self, encoder_outputs, last_dec_hidden, src_idx): 
 		time_steps = encoder_outputs.size()[1]
-		encoder_outputs, last_dec_hidden = encoder_outputs.to(device), last_dec_hidden.to(device) # [B, T, H], [L, B, H]
+#		encoder_outputs, last_dec_hidden = encoder_outputs.to(device), last_dec_hidden.to(device) # [B, T, H], [L, B, H]
 		batch_size = encoder_outputs.size()[0]
 		last_dec_hidden = last_dec_hidden.transpose(0, 1)[:, -1, :].view(batch_size, 1, -1) # [B, L, H] -> [B, 1, H]
 		energies = torch.bmm(encoder_outputs, last_dec_hidden.transpose(1, 2)).squeeze(-1)  # [B, T, H] * [B, H, 1] -> [B, T, 1] -> [B, T]
@@ -238,8 +238,8 @@ class DecoderAttnRNN(nn.Module):
 		self.softmax = nn.LogSoftmax(dim=1) #.to(device)
 
 	def forward(self, dec_input, dec_hidden, enc_outputs, src_idx):
-		dec_input, dec_hidden = dec_input.to(device), dec_hidden.to(device) # [B], [L, B, H] 
-		enc_outputs = enc_outputs.to(device) # [B * T * H] 
+		# dec_input, dec_hidden = dec_input.to(device), dec_hidden.to(device) # [B], [L, B, H] 
+		# enc_outputs = enc_outputs.to(device) # [B * T * H] 
 		batch_size = dec_input.size()[0]
 		embedded = self.embedding(dec_input).view(1, batch_size, -1) # [1, B, H]
 		attn_weights = self.attn(encoder_outputs=enc_outputs, last_dec_hidden=dec_hidden, src_idx=src_idx).unsqueeze(1) # [B, 1, T]
@@ -268,8 +268,8 @@ class EncoderDecoderAttn(nn.Module): # previously EncoderDecoderAttention
 
 	def forward(self, src_idx, targ_idx, src_lens, targ_lens, teacher_forcing_ratio): 
 		
-		src_idx, targ_idx = src_idx.to(device), targ_idx.to(device) 
-		src_lens, targ_lens = src_lens.to(device), targ_lens.to(device)
+		# src_idx, targ_idx = src_idx.to(device), targ_idx.to(device) 
+		# src_lens, targ_lens = src_lens.to(device), targ_lens.to(device)
 		batch_size = src_idx.size()[0]
 		enc_outputs, enc_hidden = self.encoder(src_idx, src_lens)
 		dec_hidden = enc_hidden 

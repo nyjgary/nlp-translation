@@ -23,7 +23,8 @@ import matplotlib as mpl
 
 RESERVED_TOKENS = {'<SOS>': 0, '<EOS>': 1, '<PAD>': 2, '<UNK>': 3}
 RESULTS_LOG = 'experiment_results/experiment_results_log.pkl'
-
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(device)
 
 def filter_reserved_tokens(sentence_as_list): 
     """ Takes a list of tokens representing a sentence, returns a filtered list with <SOS>, <EOS>, <PAD> removed, 
@@ -102,6 +103,7 @@ def evaluate(model, loader, src_id2token, targ_id2token, teacher_forcing_ratio):
 
         # for each batch, compute loss and accumulate to total 
         batch_size = src_idxs.size()[0]        
+        src_idxs, targ_idxs, src_lens, targ_lens = src_idxs.to(device), targ_idxs.to(device), src_lens.to(device), targ_lens.to(device)
         outputs, hypotheses, attn_weights = model(src_idxs, targ_idxs, src_lens, targ_lens, 
             teacher_forcing_ratio=teacher_forcing_ratio)
         outputs = outputs[1:].transpose(0, 1)
@@ -184,6 +186,7 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
         train_loss = 0 
         for batch, (src_idxs, targ_idxs, src_lens, targ_lens) in enumerate(train_loader_):
             DEBUG_START = time.time() 
+            src_idxs, targ_idxs, src_lens, targ_lens = src_idxs.to(device), targ_idxs.to(device), src_lens.to(device), targ_lens.to(device)
             model.train()
             optimizer.zero_grad()
             final_outputs, hypotheses, attn_weights = model(src_idxs, targ_idxs, src_lens, targ_lens, teacher_forcing_ratio=teacher_forcing_ratio) 
