@@ -183,18 +183,23 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
     for epoch in range(num_epochs): 
         train_loss = 0 
         for batch, (src_idxs, targ_idxs, src_lens, targ_lens) in enumerate(train_loader_):
+            DEBUG_START = time.time() 
             model.train()
             optimizer.zero_grad()
             final_outputs, hypotheses, attn_weights = model(src_idxs, targ_idxs, src_lens, targ_lens, teacher_forcing_ratio=teacher_forcing_ratio) 
+            print("Finished forward pass at {}s".format(time.time() - DEBUG_START))
             # attn_weights = attn_weights[:,1:]
             final_outputs = final_outputs[1:].transpose(0, 1)
-            targets = targ_idxs[:,1:]                
+            targets = targ_idxs[:,1:]
             outputs_for_nll = final_outputs.contiguous().view(-1, model.decoder.targ_vocab_size)
             targets_for_nll = targets.contiguous().view(-1)
             loss = criterion(outputs_for_nll, targets_for_nll)
+            print("Finished loss calc at {}s".format(time.time() - DEBUG_START))
             loss.backward()
+            print("Finished backward pass at {}s".format(time.time() - DEBUG_START))
             nn.utils.clip_grad_norm_(model.parameters(), max_norm=clip_grad_max_norm)
             optimizer.step()
+            print("Finished clip and took step at {}s".format(time.time() - DEBUG_START))
             
             # evaluate and report loss and bleu scores every 1000 minibatches or end of each epoch
             if batch % print_intermediate == 0 or ((epoch==num_epochs-1) & (batch==len(train_loader_)-1)):
