@@ -197,9 +197,9 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
             print("final_outputs type {}".format(type(final_outputs)))
             targets = targ_idxs[:,1:]
             print("targets type {}".format(type(targets)))
-            outputs_for_nll = final_outputs.contiguous().view(-1, model.decoder.targ_vocab_size)
+            outputs_for_nll = final_outputs.contiguous().view(-1, model.decoder.targ_vocab_size).to(device)
             print("outputs_for_nll type {}".format(type(outputs_for_nll)))
-            targets_for_nll = targets.contiguous().view(-1)
+            targets_for_nll = targets.contiguous().view(-1).to(device)
             print("targets_for_nll type {}".format(type(targets_for_nll)))
             loss = criterion(outputs_for_nll, targets_for_nll)
             print("Finished loss calc at {}s".format(time.time() - DEBUG_START))
