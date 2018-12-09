@@ -26,9 +26,9 @@ RESULTS_LOG = 'experiment_results/experiment_results_log.pkl'
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 def filter_reserved_tokens(sentence_as_list): 
-    """ Takes a list of tokens representing a sentence, returns a filtered list with <SOS>, <EOS>, <PAD> removed, 
-        as well as everything after the first <EOS> removed """ 
-    
+    """ Takes a list of tokens representing a sentence, removes everything after <EOS>, 
+    as well as remove reserved tokens <SOS>, <EOS>, <PAD>. Outputs filtered sentence as a string. """ 
+
     # drops everything after <EOS> 
     try: 
         output = sentence_as_list[:sentence_as_list.index('<EOS>')]
@@ -53,31 +53,26 @@ def tensor2corpus(tensor, id2token):
     return corpus
 
 
-def calc_sentence_bleu(ref_sent, hyp_sent): 
-    """ Takes a reference sentence and hypothesis sentence as respective lists of tokens, outputs their bleu score """ 
+def reconstruct_corpus(token_list): 
+    """ Takes a list of tokens, filter out reserved tokens, and recombine them into a corpus string """ 
 
-    # filters out reserved tokens 
-    ref_sent, hyp_sent = filter_reserved_tokens(ref_sent), filter_reserved_tokens(hyp_sent)
-    
-    # compute bleu score 
-    sentence_bleu = sacrebleu.sentence_bleu(hyp_sent, ref_sent)
+    sentences = [filter_reserved_tokens(sublist) for sublist in token_list]
+    corpus_string = ' '.join(sentences)
 
-    return sentence_bleu 
+    return corpus_string  
 
 
 def calc_corpus_bleu(ref_list, hyp_list): 
-    """ Takes a list of reference sentences and a list of hypothesis sentences, outputs the average bleu score of 
-        all the sentence pairs in the batch 
+    """ Takes a list of reference sentences and a list of hypothesis sentences, flattens them, and outputs their corpus bleu """
 
-        *** TODO *** 
-        - Convert for loop to list comprehension 
-    """ 
+    # convert ref_list and hyp_list into strings 
+    hyp_stream = [reconstruct_corpus(hyp_list)]
+    ref_streams = [[reconstruct_corpus(ref_list)]]
+    
+    # compute bleu score 
+    bleu_score = sacrebleu.corpus_bleu(hyp_stream, ref_streams).score  
 
-    total_bleu = 0 
-    for ref_sent, hyp_sent in zip(ref_list, hyp_list): 
-        total_bleu = total_bleu + calc_sentence_bleu(ref_sent, hyp_sent)
-    avg_bleu = total_bleu / len(ref_list)
-    return avg_bleu 
+    return bleu_score 
 
 
 def evaluate(model, loader, src_id2token, targ_id2token, teacher_forcing_ratio): # previously evaluate_attn
@@ -553,3 +548,28 @@ def plot_multiple_learning_curves(results_df, plot_variable, figsize=(8, 5), leg
 #         print()
 
 
+# def calc_sentence_bleu(ref_sent, hyp_sent): 
+#     """ Takes a reference sentence and hypothesis sentence as respective lists of tokens, outputs their bleu score """ 
+
+#     # filters out reserved tokens 
+#     ref_sent, hyp_sent = filter_reserved_tokens(ref_sent), filter_reserved_tokens(hyp_sent)
+    
+#     # compute bleu score 
+#     sentence_bleu = sacrebleu.sentence_bleu(hyp_sent, ref_sent)
+
+#     return sentence_bleu 
+
+
+# def calc_corpus_bleu(ref_list, hyp_list): 
+#     """ Takes a list of reference sentences and a list of hypothesis sentences, outputs the average bleu score of 
+#         all the sentence pairs in the batch 
+
+#         *** TODO *** 
+#         - Convert for loop to list comprehension 
+#     """ 
+
+#     total_bleu = 0 
+#     for ref_sent, hyp_sent in zip(ref_list, hyp_list): 
+#         total_bleu = total_bleu + calc_sentence_bleu(ref_sent, hyp_sent)
+#     avg_bleu = total_bleu / len(ref_list)
+#     return avg_bleu 
