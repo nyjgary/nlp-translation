@@ -24,7 +24,6 @@ import matplotlib as mpl
 RESERVED_TOKENS = {'<SOS>': 0, '<EOS>': 1, '<PAD>': 2, '<UNK>': 3}
 RESULTS_LOG = 'experiment_results/experiment_results_log.pkl'
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(device)
 
 def filter_reserved_tokens(sentence_as_list): 
     """ Takes a list of tokens representing a sentence, returns a filtered list with <SOS>, <EOS>, <PAD> removed, 
@@ -203,8 +202,6 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
             
             # evaluate and report loss and bleu scores every 1000 minibatches or end of each epoch
             if batch % print_intermediate == 0 or ((epoch==num_epochs-1) & (batch==len(train_loader_)-1)):
-
-                print("Finished gradient updates at {}".format(time.time() - start_time))
 
                 # evaluate every epoch 
                 result = {} 
