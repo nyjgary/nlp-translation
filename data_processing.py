@@ -40,7 +40,8 @@ def text2tokens(raw_text_fp, lang_type):
 
 def load_word2vec(lang): 
     """ Loads pretrained vectors for a given language """
-    filepath = "data/pretrained_word2vec/wiki.zh.vec".format(lang)
+#    filepath = "data/pretrained_word2vec/wiki.zh.vec".format(lang) ### OMG was this bug here all along?
+    filepath = "data/pretrained_word2vec/wiki.{}.vec".format(lang) ### OMG was this bug here all along?
     word2vec = KeyedVectors.load_word2vec_format(filepath)
     return word2vec
 
