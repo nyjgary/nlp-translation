@@ -91,7 +91,7 @@ def evaluate(model, loader, src_id2token, targ_id2token, teacher_forcing_ratio):
     """
     
     with torch.no_grad():
-    
+
         model.eval() 
         total_loss = 0 
 
@@ -165,7 +165,7 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
     clip_grad_max_norm = params['clip_grad_max_norm']
     model_name = params['model_name']
     lazy_train = params['lazy_train']
-    use_attn = params['use_attn']
+    attention_type = params['attention_type']
 
     # designate data loaders used to train and calculate losses 
     if lazy_train: 
@@ -326,7 +326,8 @@ def summarize_results(results_log):
         the val_acc dict into the best validation accuracy obtained amongst all the epochs logged """
     results_df = pd.DataFrame.from_dict(results_log)
     results_df = pd.concat([results_df, results_df['hyperparams'].apply(pd.Series)], axis=1)
-    results_df['val_loss'] = results_df['results'].apply(lambda d: pd.DataFrame.from_dict(d)['val_loss'].min())
+    results_df['best_val_loss'] = results_df['results'].apply(lambda d: pd.DataFrame.from_dict(d)['val_loss'].min())
+    results_df['best_val_bleu'] = results_df['results'].apply(lambda d: pd.DataFrame.from_dict(d)['val_bleu'].min())
     return results_df.sort_values(by='dt_created', ascending=False) 
 
 
@@ -337,13 +338,25 @@ def count_parameters(model):
     return all_params, trainable_params
 
 
-def plot_single_learning_curve(results, figsize=(8, 5)): 
+def plot_single_learning_curve(results, figsize=(14, 5)): 
     """ Plots learning curve of a SINGLE experiment, includes both train and validation accuracy """
     results_df = pd.DataFrame.from_dict(results)
     results_df = results_df.set_index('epoch')
-    results_df.plot(figsize=figsize)
-    plt.ylabel('Validation Loss')
-    plt.xlabel('Epoch')
+    results_df = results_df[['val_bleu', 'val_loss']]
+
+    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=figsize)
+    results_df['val_loss'].plot(ax=axes[0])
+    axes[0].set_ylabel('validation loss')
+    results_df['val_bleu'].plot(ax=axes[1])
+    axes[1].set_ylabel('validation bleu')
+
+    # for each column plot one chart 
+    # cols_to_plot = results_df.columns 
+    # plt.subplot(2, 1, 2)
+
+    # results_df.plot(figsize=figsize)
+    # plt.ylabel('Validation Loss')
+    # plt.xlabel('Epoch')
 
 
 def plot_multiple_learning_curves(results_df, plot_variable, figsize=(8, 5), legend_loc='best'):
