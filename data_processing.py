@@ -12,6 +12,7 @@ import unicodedata
 import re
 from torch.autograd import Variable
 from gensim.models import KeyedVectors
+from gensim.models.wrappers import FastText
 import random
 import time
 from datetime import datetime
@@ -38,11 +39,24 @@ def text2tokens(raw_text_fp, lang_type):
     return tokens_data 
 
 
+# def load_word2vec(lang): 
+#     """ Loads pretrained vectors for a given language """
+# #    filepath = "data/pretrained_word2vec/wiki.zh.vec".format(lang) ### OMG was this bug here all along?
+#     filepath = "data/pretrained_word2vec/wiki.{}.vec".format(lang) ### OMG was this bug here all along?
+#     word2vec = KeyedVectors.load_word2vec_format(filepath)
+#     return word2vec
+
+
 def load_word2vec(lang): 
-    """ Loads pretrained vectors for a given language """
+    """ Loads pretrained vectors for a given language 
+        Note: if lang = vi or zh load the full model (which predicts out-of-vocab embeddings), else load simple model 
+    """
 #    filepath = "data/pretrained_word2vec/wiki.zh.vec".format(lang) ### OMG was this bug here all along?
-    filepath = "data/pretrained_word2vec/wiki.{}.vec".format(lang) ### OMG was this bug here all along?
-    word2vec = KeyedVectors.load_word2vec_format(filepath)
+    if lang == 'en': 
+        word2vec = KeyedVectors.load_word2vec_format("data/pretrained_word2vec/wiki.en.vec")
+    else: 
+        word2vec = FastText.load_fasttext_format("data/pretrained_word2vec/wiki.{}".format(lang))
+
     return word2vec
 
 
