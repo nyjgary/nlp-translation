@@ -90,35 +90,37 @@ def evaluate(model, loader, src_id2token, targ_id2token, teacher_forcing_ratio):
         - Package output indices and tokens as two dictionaries for neatness sake 
     """
     
-    model.eval() 
-    total_loss = 0 
-
-    # initialize empty list to hold all source, reference and model translations 
-    reference_corpus = []
-    hypothesis_corpus = [] 
-    source_corpus = [] 
-    attn_weights_corpus = []
+    with torch.no_grad():
     
-    for i, (src_idxs, targ_idxs, src_lens, targ_lens) in enumerate(loader): 
+        model.eval() 
+        total_loss = 0 
 
-        # for each batch, compute loss and accumulate to total 
-        batch_size = src_idxs.size()[0]        
-        src_idxs, targ_idxs, src_lens, targ_lens = src_idxs.to(device), targ_idxs.to(device), src_lens.to(device), targ_lens.to(device)
-        outputs, hypotheses, attn_weights = model(src_idxs, targ_idxs, src_lens, targ_lens, 
-            teacher_forcing_ratio=teacher_forcing_ratio)
-        outputs = outputs[1:].transpose(0, 1)
-        targets = targ_idxs[:,1:]
-        attn_weights = attn_weights[:,1:]
-        outputs_for_nll = outputs.contiguous().view(-1, model.decoder.targ_vocab_size).to(device)
-        targets_for_nll = targets.contiguous().view(-1).to(device)
-        loss = F.nll_loss(outputs_for_nll, targets_for_nll, ignore_index=RESERVED_TOKENS['<PAD>'])        
-        total_loss += loss.item()  
+        # initialize empty list to hold all source, reference and model translations 
+        reference_corpus = []
+        hypothesis_corpus = [] 
+        source_corpus = [] 
+        attn_weights_corpus = []
+        
+        for i, (src_idxs, targ_idxs, src_lens, targ_lens) in enumerate(loader): 
 
-        # append to lists holding corpus 
-        hypothesis_corpus.append(hypotheses)
-        reference_corpus.append(targets)
-        source_corpus.append(src_idxs)
-        attn_weights_corpus.append(attn_weights)
+            # for each batch, compute loss and accumulate to total 
+            batch_size = src_idxs.size()[0]        
+            src_idxs, targ_idxs, src_lens, targ_lens = src_idxs.to(device), targ_idxs.to(device), src_lens.to(device), targ_lens.to(device)
+            outputs, hypotheses, attn_weights = model(src_idxs, targ_idxs, src_lens, targ_lens, 
+                teacher_forcing_ratio=teacher_forcing_ratio)
+            outputs = outputs[1:].transpose(0, 1)
+            targets = targ_idxs[:,1:]
+            attn_weights = attn_weights[:,1:]
+            outputs_for_nll = outputs.contiguous().view(-1, model.decoder.targ_vocab_size).to(device)
+            targets_for_nll = targets.contiguous().view(-1).to(device)
+            loss = F.nll_loss(outputs_for_nll, targets_for_nll, ignore_index=RESERVED_TOKENS['<PAD>'])        
+            total_loss += loss.item()  
+
+            # append to lists holding corpus 
+            hypothesis_corpus.append(hypotheses)
+            reference_corpus.append(targets)
+            source_corpus.append(src_idxs)
+            attn_weights_corpus.append(attn_weights)
 
     # concat list of index tensors into corpus tensors (as indices), then convert to list of sentence (as tokens)
     hyp_idxs = torch.cat(hypothesis_corpus, dim=0) 

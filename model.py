@@ -224,7 +224,6 @@ class DecoderAttnRNN(nn.Module):
 		if attention_type == 'additive': 
 			self.attn = Attention(self.enc_hidden_dim, self.dec_hidden_dim, 
 				num_annotations = self.src_max_sentence_len, num_layers=self.num_layers) #.to(device)
-			print("Using additive attention...")
 		elif attention_type == 'multiplicative': 
 			self.attn = DotAttention(self.enc_hidden_dim, self.dec_hidden_dim, 
 			num_annotations = self.src_max_sentence_len, num_layers=self.num_layers) #.to(device)
