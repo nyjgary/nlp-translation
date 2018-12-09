@@ -57,17 +57,17 @@ def reconstruct_corpus(token_list):
     """ Takes a list of tokens, filter out reserved tokens, and recombine them into a corpus string """ 
 
     sentences = [filter_reserved_tokens(sublist) for sublist in token_list]
-    corpus_string = ' '.join(sentences)
+    # corpus_string = ' '.join(sentences)
 
-    return corpus_string  
+    return sentences  
 
 
 def calc_corpus_bleu(ref_list, hyp_list): 
     """ Takes a list of reference sentences and a list of hypothesis sentences, flattens them, and outputs their corpus bleu """
 
     # convert ref_list and hyp_list into strings 
-    hyp_stream = [reconstruct_corpus(hyp_list)]
-    ref_streams = [[reconstruct_corpus(ref_list)]]
+    hyp_stream = reconstruct_corpus(hyp_list)
+    ref_streams = [reconstruct_corpus(ref_list)]
     
     # compute bleu score 
     bleu_score = sacrebleu.corpus_bleu(hyp_stream, ref_streams).score  
