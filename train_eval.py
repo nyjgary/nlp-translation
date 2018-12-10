@@ -234,7 +234,7 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
                         targ_id2token, val_attn, print_attn=print_attn, num_samples=inspect_samples)
                     
                 if save_checkpoint: 
-                    if result['val_loss'] == pd.DataFrame.from_dict(results)['val_loss'].min(): 
+                    if result['val_bleu'] == pd.DataFrame.from_dict(results)['val_bleu'].min(): 
                         checkpoint_fp = 'model_checkpoints/{}.pth.tar'.format(model_name)
                         check_dir_exists(filename=checkpoint_fp)
                         torch.save(model.state_dict(), checkpoint_fp)
