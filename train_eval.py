@@ -19,6 +19,7 @@ from ast import literal_eval
 from sklearn.metrics import confusion_matrix
 import matplotlib.style
 import matplotlib as mpl
+from collections import OrderedDict
 
 
 RESERVED_TOKENS = {'<SOS>': 0, '<EOS>': 1, '<PAD>': 2, '<UNK>': 3}
@@ -307,6 +308,9 @@ def load_experiment_log(experiment_name=None, model_name=None, filename=RESULTS_
 
     if model_name is not None: 
         results_log = [r for r in results_log if r['model_name'] == model_name]
+
+    # sort by dt_created 
+    results_log = sorted(results_log, key=lambda k: k['dt_created'], reverse=True)
         
     return results_log
 
