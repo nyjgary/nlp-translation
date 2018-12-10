@@ -260,8 +260,7 @@ def sample_predictions(hyp_idxs, ref_idxs, source_idxs, hyp_tokens, ref_tokens, 
         model_translation = ' '.join(hyp_tokens[rand])
         print("Model: {}".format(model_translation))
         if print_attn: 
-            attn = attn[rand]
-            print("Attention Weights: {}".format(attn))
+            print("Attention Weights: {}".format(attn[rand]))
         print()
 
 
