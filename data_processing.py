@@ -39,24 +39,14 @@ def text2tokens(raw_text_fp, lang_type):
     return tokens_data 
 
 
-# def load_word2vec(lang): 
-#     """ Loads pretrained vectors for a given language """
-# #    filepath = "data/pretrained_word2vec/wiki.zh.vec".format(lang) ### OMG was this bug here all along?
-#     filepath = "data/pretrained_word2vec/wiki.{}.vec".format(lang) ### OMG was this bug here all along?
-#     word2vec = KeyedVectors.load_word2vec_format(filepath)
-#     return word2vec
-
-
 def load_word2vec(lang): 
     """ Loads pretrained vectors for a given language 
         Note: if lang = vi or zh load the full model (which predicts out-of-vocab embeddings), else load simple model 
     """
-#    filepath = "data/pretrained_word2vec/wiki.zh.vec".format(lang) ### OMG was this bug here all along?
     if lang == 'en': 
         word2vec = KeyedVectors.load_word2vec_format("data/pretrained_word2vec/wiki.en.vec")
     else: 
         word2vec = FastText.load_fasttext_format("data/pretrained_word2vec/wiki.{}".format(lang))
-
     return word2vec
 
 
@@ -269,33 +259,3 @@ def create_dataloaders(processed_data, src_max_sentence_len, targ_max_sentence_l
         loaders[split] = DataLoader(dataset, batch_size=batch_size, shuffle=False, 
                                     collate_fn=partial(collate_func, src_max_sentence_len, targ_max_sentence_len))
     return loaders 
-
-
-### OLD CODE ### 
-
-# def process_data(src_lang, targ_lang, vocab, sample_limit=None): 
-#     """ - Main function that takes source and target language names, vocab dict generated, 
-#         and an optional sample_limit representing the number of sentences to subset if necessary. 
-#         - Returns data as a nested dictionary containing the indices and tokens of train/dev/test data 
-#         for both source and target languages. 
-#         - Note the hierachy of data dict is: data[split][lang_type]['tokens' or 'indices'], 
-#         e.g. to access indices of source training data, use data['train']['source']['indices']
-#     """ 
-    
-#     # get filepaths 
-#     data = get_filepaths(src_lang, targ_lang)
-    
-#     # loop through each file, read in text, convert to tokens, then to indices 
-#     for split in ['train', 'dev', 'test']: 
-#         for lang_type in ['source', 'target']: 
-#             # read in tokens 
-#             tokens = text2tokens(data[split][lang_type]['filepath'], lang_type)
-#             if sample_limit is not None: 
-#                 tokens = tokens[:sample_limit]
-#             # convert tokens to indices 
-#             indices = tokens2indices(tokens, vocab[data['languages'][lang_type]]['token2id'])
-#             # save to dictionary 
-#             data[split][lang_type]['tokens'] = tokens
-#             data[split][lang_type]['indices'] = indices
-            
-#     return data
