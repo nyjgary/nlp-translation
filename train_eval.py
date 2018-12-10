@@ -207,12 +207,12 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
 
                 # calculate metrics on validation set 
                 result['val_loss'], result['val_bleu'], val_hyp_idxs, val_ref_idxs, val_source_idxs, val_hyp_tokens, val_ref_tokens, val_source_tokens, val_attn = \
-                    evaluate(model, dev_loader_, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)        
+                    evaluate(model, dev_loader_, src_id2token, targ_id2token, teacher_forcing_ratio=0) #teacher_forcing_ratio)        
 
                 # calculate metrics on train set (or proxy thereof) only if lazy_eval not set to True 
                 if not lazy_eval: 
                     result['train_loss'], result['train_bleu'], train_hyp_idxs, train_ref_idxs, train_source_idxs, train_hyp_tokens, train_ref_tokens, train_source_tokens, train_attn = \
-                            evaluate(model, train_loader_proxy, src_id2token, targ_id2token, teacher_forcing_ratio=teacher_forcing_ratio)
+                            evaluate(model, train_loader_proxy, src_id2token, targ_id2token, teacher_forcing_ratio=0) #teacher_forcing_ratio)
                 else: 
                     result['train_loss'], result['train_bleu'] = 0, 0  
 
