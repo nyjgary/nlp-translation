@@ -158,6 +158,7 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
     num_epochs = params['num_epochs']
     teacher_forcing_ratio = params['teacher_forcing_ratio']
     clip_grad_max_norm = params['clip_grad_max_norm']
+    experiment_name = params['experiment_name']
     model_name = params['model_name']
     lazy_train = params['lazy_train']
     attention_type = params['attention_type']
@@ -243,9 +244,9 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
     dt_created = datetime.now().strftime('%Y-%m-%d %H:%M:%S')               
 
     if save_to_log: 
-        append_to_log(params, results, runtime, model_name, dt_created)
+        append_to_log(params, results, runtime, experiment_name, model_name, dt_created)
 
-    print("Experiment completed in {} minutes with {:.2f} best validation loss and {:.2f} best validation BLEU.".format(
+    print("Model training completed in {} minutes with {:.2f} best validation loss and {:.2f} best validation BLEU.".format(
         int(runtime), pd.DataFrame.from_dict(results)['val_loss'].min(), 
         pd.DataFrame.from_dict(results)['val_bleu'].max()))
 
@@ -282,15 +283,15 @@ def check_dir_exists(filename):
         pass 
         
 
-def append_to_log(hyperparams, results, runtime, experiment_name, dt_created, filename=RESULTS_LOG): 
+def append_to_log(hyperparams, results, runtime, experiment_name, model_name, dt_created, filename=RESULTS_LOG): 
     """ Appends results and details of a single experiment to a log file """
     
     # check directory exists, else creates it 
     check_dir_exists(filename)
         
     # store experiment details in a dictionary 
-    new_result = {'experiment_name': experiment_name, 'hyperparams': hyperparams, 'results': results, 
-                  'runtime': runtime, 'dt_created': dt_created}
+    new_result = {'experiment_name': experiment_name, 'model_name': model_name, 'hyperparams': hyperparams, 
+        'results': results, 'runtime': runtime, 'dt_created': dt_created}
     
     # if log already exists, append to log 
     try: 
@@ -305,13 +306,16 @@ def append_to_log(hyperparams, results, runtime, experiment_name, dt_created, fi
     pkl.dump(results_log, open(filename, "wb")) 
 
 
-def load_experiment_log(experiment_name=None, filename=RESULTS_LOG): 
+def load_experiment_log(experiment_name=None, model_name=None, filename=RESULTS_LOG): 
     """ Loads experiment log, with option to filter for a specific experiment_name """
     
     results_log = pkl.load(open(filename, "rb"))
     
     if experiment_name is not None: 
         results_log = [r for r in results_log if r['experiment_name'] == experiment_name]
+
+    if model_name is not None: 
+        results_log = [r for r in results_log if r['model_name'] == model_name]
         
     return results_log
 
