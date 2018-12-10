@@ -241,10 +241,11 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
                         torch.save(model.state_dict(), checkpoint_fp)
  
     runtime = (time.time() - start_time) / 60 
-    dt_created = datetime.now().strftime('%Y-%m-%d %H:%M:%S')               
+    dt_created = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    total_params, trainable_params = count_parameters(model)               
 
     if save_to_log: 
-        append_to_log(params, results, runtime, experiment_name, model_name, dt_created)
+        append_to_log(params, results, runtime, experiment_name, model_name, dt_created, total_params, trainable_params)
 
     print("Model training completed in {} minutes with {:.2f} best validation loss and {:.2f} best validation BLEU.".format(
         int(runtime), pd.DataFrame.from_dict(results)['val_loss'].min(), 
@@ -283,7 +284,7 @@ def check_dir_exists(filename):
         pass 
         
 
-def append_to_log(hyperparams, results, runtime, experiment_name, model_name, dt_created, filename=RESULTS_LOG): 
+def append_to_log(hyperparams, results, runtime, experiment_name, model_name, dt_created, total_params, trainable_params, filename=RESULTS_LOG): 
     """ Appends results and details of a single experiment to a log file """
     
     # check directory exists, else creates it 
@@ -291,7 +292,8 @@ def append_to_log(hyperparams, results, runtime, experiment_name, model_name, dt
         
     # store experiment details in a dictionary 
     new_result = {'experiment_name': experiment_name, 'model_name': model_name, 'hyperparams': hyperparams, 
-        'results': results, 'runtime': runtime, 'dt_created': dt_created}
+        'results': results, 'runtime': runtime, 'dt_created': dt_created, 
+        'total_params': total_params, 'trainable_params': trainable_params}
     
     # if log already exists, append to log 
     try: 
