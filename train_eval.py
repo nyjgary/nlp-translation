@@ -333,16 +333,18 @@ def count_parameters(model):
 
 
 def plot_single_learning_curve(results, figsize=(14, 5)): 
-    """ Plots learning curve of a SINGLE experiment, includes both train and validation accuracy """
+    """ Plots learning curve of a SINGLE experiment """
     results_df = pd.DataFrame.from_dict(results)
     results_df = results_df.set_index('epoch')
     results_df = results_df[['val_bleu', 'val_loss']]
 
     fig, axes = plt.subplots(nrows=1, ncols=2, figsize=figsize)
     results_df['val_loss'].plot(ax=axes[0])
-    axes[0].set_ylabel('validation loss')
+    axes[0].set_ylabel('Validation Loss')
     results_df['val_bleu'].plot(ax=axes[1])
-    axes[1].set_ylabel('validation bleu')
+    axes[1].set_ylabel('Validation BLEU')
+    axes[0].set_xlabel('Epoch')
+    axes[1].set_xlabel('Epoch')
 
     # for each column plot one chart 
     # cols_to_plot = results_df.columns 
@@ -353,16 +355,19 @@ def plot_single_learning_curve(results, figsize=(14, 5)):
     # plt.xlabel('Epoch')
 
 
-def plot_multiple_learning_curves(results_df, plot_variable, figsize=(8, 5), legend_loc='best'):
+def plot_multiple_learning_curves(results_df, plot_variable, figsize=(14, 5), legend_loc='best'):
     """ Plots learning curves of MULTIPLE experiments, includes only validation accuracy """
-    plt.figure(figsize=figsize)
+    fig, axes = plt.subplots(nrows=1, ncols=2, figsize=figsize)
     for index, row in results_df.iterrows():
         val_loss_hist = pd.DataFrame.from_dict(row['results']).set_index('epoch')['val_loss'] 
-        plt.plot(val_loss_hist, label="{} ({}%)".format(row[plot_variable], val_loss_hist.max()))
-    plt.legend(title=plot_variable, loc=legend_loc)    
-    plt.ylabel('Validation Loss')
-    plt.xlabel('Epoch')
-
+        axes[0].plot(val_loss_hist, label="{} ({}%)".format(row[plot_variable], val_loss_hist.max()))
+        val_bleu_hist = pd.DataFrame.from_dict(row['results']).set_index('epoch')['val_bleu'] 
+        axes[1].plot(val_bleu_hist, label="{} ({}%)".format(row[plot_variable], val_bleu_hist.max()))        
+    axes[0].set_ylabel('Validation Loss')
+    axes[1].set_ylabel('Validation ')
+    axes[0].set_xlabel('Epoch')
+    axes[1].set_xlabel('Epoch')
+    plt.legend(loc=legend_loc)
 
 # def plot_multiple_learning_curves(results_df, plot_variable, figsize=(8, 5), legend_loc='best'):
 #     """ Plots learning curves of MULTIPLE experiments, includes only validation accuracy """
