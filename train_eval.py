@@ -319,6 +319,7 @@ def summarize_results(results_log):
         the val_acc dict into the best validation accuracy obtained amongst all the epochs logged """
     results_df = pd.DataFrame.from_dict(results_log)
     results_df = pd.concat([results_df, results_df['hyperparams'].apply(pd.Series)], axis=1)
+    results_df = results_df.loc[:, ~results_df.columns.duplicated()] # unfortunately saved model_name and experiment_name twice 
     results_df['best_val_loss'] = results_df['results'].apply(lambda d: pd.DataFrame.from_dict(d)['val_loss'].min())
     results_df['best_val_bleu'] = results_df['results'].apply(lambda d: pd.DataFrame.from_dict(d)['val_bleu'].max())
     return results_df.sort_values(by='dt_created', ascending=False) 
