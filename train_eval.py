@@ -320,7 +320,7 @@ def summarize_results(results_log):
     results_df = pd.DataFrame.from_dict(results_log)
     results_df = pd.concat([results_df, results_df['hyperparams'].apply(pd.Series)], axis=1)
     results_df['best_val_loss'] = results_df['results'].apply(lambda d: pd.DataFrame.from_dict(d)['val_loss'].min())
-    results_df['best_val_bleu'] = results_df['results'].apply(lambda d: pd.DataFrame.from_dict(d)['val_bleu'].min())
+    results_df['best_val_bleu'] = results_df['results'].apply(lambda d: pd.DataFrame.from_dict(d)['val_bleu'].max())
     return results_df.sort_values(by='dt_created', ascending=False) 
 
 
@@ -361,3 +361,14 @@ def plot_multiple_learning_curves(results_df, plot_variable, figsize=(8, 5), leg
     plt.legend(title=plot_variable, loc=legend_loc)    
     plt.ylabel('Validation Loss')
     plt.xlabel('Epoch')
+
+
+# def plot_multiple_learning_curves(results_df, plot_variable, figsize=(8, 5), legend_loc='best'):
+#     """ Plots learning curves of MULTIPLE experiments, includes only validation accuracy """
+#     plt.figure(figsize=figsize)
+#     for index, row in results_df.iterrows():
+#         val_loss_hist = pd.DataFrame.from_dict(row['results']).set_index('epoch')['val_loss'] 
+#         plt.plot(val_loss_hist, label="{} ({}%)".format(row[plot_variable], val_loss_hist.max()))
+#     plt.legend(title=plot_variable, loc=legend_loc)    
+#     plt.ylabel('Validation Loss')
+#     plt.xlabel('Epoch')
