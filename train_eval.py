@@ -74,7 +74,7 @@ def calc_corpus_bleu(ref_list, hyp_list):
     return bleu_score 
 
 
-def evaluate(model, loader, src_id2token, targ_id2token, teacher_forcing_ratio): 
+def evaluate(model, loader, src_id2token, targ_id2token, teacher_forcing_ratio=1): 
     """ Evaluates a model given a loader, id2token dicts, and teacher_forcing_ratio. 
         Outputs avg loss, avg bleu, as well as indices and tokens representing source, reference, and model translations. 
     """
@@ -247,7 +247,7 @@ def train_and_eval(model, loaders_full, loaders_minibatch, loaders_minitrain, pa
 
 
 def sample_predictions(hyp_idxs, ref_idxs, source_idxs, hyp_tokens, ref_tokens, source_tokens, id2token, 
-    attn, print_attn, num_samples=1, ): # previously sample_predictions_attn
+    attn, print_attn, num_samples=1, ): 
 
     """ Sample a few source sentences, reference and model translations to review """ 
 
