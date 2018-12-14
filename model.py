@@ -284,12 +284,13 @@ class EncoderCNN(nn.Module):
 		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True).to(device)
 		self.conv1_a = nn.Conv1d(300, enc_hidden_dim, kernel_size=3, padding=1).to(device)
 		self.conv2_a = nn.Conv1d(enc_hidden_dim, enc_hidden_dim, kernel_size=3, padding=1).to(device)
-		self.conv1_b = nn.Conv1d(300, enc_hidden_dim, kernel_size=3, padding=1).to(device)
-		self.conv2_b = nn.Conv1d(enc_hidden_dim, enc_hidden_dim, kernel_size=3, padding=1).to(device)
 		self.dropout_val = dropout
 		self.src_max_sentence_len = src_max_sentence_len
+		self.linearout = nn.Linear(enc_hidden_dim,300)
+		self.linear_for_hidden = nn.Linear(300 * 10, self.enc_hidden_dim)
  
 
+		
 	def forward(self, enc_input, enc_input_lens):
 		enc_input = enc_input.to(device)
 		enc_input_lens = enc_input_lens.to(device)
@@ -300,23 +301,125 @@ class EncoderCNN(nn.Module):
 		# 1st net
 		hidden_1_a = self.conv1_a(embedded.transpose(1,2)).transpose(1,2)
 		#print(hidden_1_a.shape)
-		hidden_1_a.contiguous().view(-1, hidden_1_a.size(-1))
-		hidden_1_a = F.leaky_relu(hidden_1_a.contiguous().view(-1, self.enc_embed_dim)
-							   ).view(batch_size, -1, hidden_1_a.size(-1))
+		#hidden_1_a.contiguous().view(-1, hidden_1_a.size(-1))
+		hidden_1_a = torch.tanh(hidden_1_a.contiguous()).view(batch_size, -1, hidden_1_a.size(-1))
 		hidden_2_a = self.conv2_a(hidden_1_a.transpose(1,2)).transpose(1,2)
-		hidden_2_a = F.leaky_relu(hidden_2_a.contiguous().view(-1, hidden_2_a.size(-1))).view(
-													batch_size, -1, hidden_2_a.size(-1))
-		# 2nd net
-		hidden_1_b = self.conv1_a(embedded.transpose(1,2)).transpose(1,2)
-		hidden_1_b.contiguous().view(-1, hidden_1_b.size(-1))
-		hidden_1_b = F.leaky_relu(hidden_1_b.contiguous().view(-1, self.enc_embed_dim)
-							   ).view(batch_size, -1, hidden_1_b.size(-1))
-		hidden_2_b = self.conv2_a(hidden_1_b.transpose(1,2)).transpose(1,2)
-		hidden_2_b = F.leaky_relu(hidden_2_b.contiguous().view(-1, hidden_2_b.size(-1))).view(
-													batch_size, -1, hidden_2_b.size(-1))
-		hidden_2_b = hidden_2_b.view(-1, 2, batch_size, self.enc_hidden_dim)
-		hidden_2_b = hidden_2_b.transpose(0,1)
-
-		hidden_2_b = hidden_2_b[:, 0, :, :].squeeze(dim=1) + hidden_2_b[:, 1, :, :].squeeze(dim=1)
+		hidden_2_a = torch.tanh(hidden_2_a.contiguous().view(
+													batch_size, -1, hidden_2_a.size(-1)))
+		#print(hidden_2_a.transpose(1,2).shape)
+		hidden_2_a = self.linearout(hidden_2_a)
+		#print(hidden_2_a.shape)
+		dim_1_hidden = self.linear_for_hidden(hidden_2_a.view(batch_size,1, -1))
 		
-		return hidden_2_a , hidden_2_b.view(2,batch_size, -1)
+		return hidden_2_a, dim_1_hidden
+    
+class EncoderCNN2(nn.Module):
+	
+	def __init__(self, pretrained_word2vec, src_max_sentence_len=10, enc_hidden_dim=512, dropout=0.1):
+		super(EncoderCNN2, self).__init__()
+		self.enc_embed_dim = 300
+		self.enc_hidden_dim = enc_hidden_dim
+		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True).to(device)
+		self.conv1_a = nn.Conv1d(300*src_max_sentence_len, enc_hidden_dim, kernel_size=3, padding=1).to(device)
+		self.conv2_a = nn.Conv1d(enc_hidden_dim, enc_hidden_dim, kernel_size=3, padding=1).to(device)
+		self.dropout_val = dropout
+		self.src_max_sentence_len = src_max_sentence_len
+		self.linearout = nn.Linear(enc_hidden_dim,3000)
+		self.linear_for_hidden = nn.Linear(3000, self.enc_hidden_dim)
+ 
+
+		
+	def forward(self, enc_input, enc_input_lens):
+		enc_input = enc_input.to(device)
+		enc_input_lens = enc_input_lens.to(device)
+		batch_size = enc_input.size()[0]
+		embedded = self.embedding(enc_input)
+		embedded = F.dropout(embedded, self.dropout_val)
+		embedded = embedded.view(batch_size, -1, 1)
+		
+		# 1st net
+		hidden_1_a = self.conv1_a(embedded)
+		#print(hidden_1_a.shape)
+		#hidden_1_a.contiguous().view(-1, hidden_1_a.size(-1))
+		hidden_1_a = torch.tanh(hidden_1_a.contiguous()).view(batch_size, -1, hidden_1_a.size(-1))
+		hidden_2_a = self.conv2_a(hidden_1_a)
+		hidden_2_a = torch.tanh(hidden_2_a.contiguous().view(
+													batch_size, -1, hidden_2_a.size(-1)))
+		#print(hidden_2_a.transpose(1,2).shape)
+		#print(hidden_2_a.shape)
+		hidden_2_a = self.linearout(hidden_2_a.transpose(1,2)).view(batch_size, -1,self.enc_embed_dim)
+		#print(hidden_2_a.shape)
+		dim_1_hidden = self.linear_for_hidden(hidden_2_a.view(batch_size,1, -1))
+		#print(dim_1_hidden.shape)
+		#print('output {}'.format(hidden_2_a.shape))
+		#print('hidden {}'.format(dim_1_hidden.shape))
+		
+		return hidden_2_a, dim_1_hidden
+    
+class Decoder_RNN_from_CNN(nn.Module):
+	""" Vanilla decoder without attention, but final layer from encoder is repeatedly passed as input to each time step. 
+		Handles output from EncoderRNN, which concats bidirectional output. 
+	""" 
+
+	def __init__(self, dec_hidden_dim, enc_hidden_dim, num_layers, targ_vocab_size, targ_max_sentence_len, pretrained_word2vec, batch_size):
+		super(Decoder_RNN_from_CNN, self).__init__()
+		self.dec_embed_dim = 300
+		self.dec_hidden_dim = dec_hidden_dim 
+		self.enc_hidden_dim = enc_hidden_dim
+		self.targ_vocab_size = targ_vocab_size
+		self.batch_size = batch_size
+		self.targ_max_sentence_len = targ_max_sentence_len
+		self.num_layers = num_layers
+		self.embedding = nn.Embedding.from_pretrained(pretrained_word2vec, freeze=True) 
+		self.gru = nn.GRU(300 + self.enc_hidden_dim, self.dec_hidden_dim, num_layers=self.num_layers) 
+		self.out = nn.Linear(dec_hidden_dim, self.targ_vocab_size) 
+		self.softmax = nn.LogSoftmax(dim=1) 
+
+	def forward(self, dec_input, context, dec_hidden, enc_outputs):  
+		
+		batch_size = dec_input.size()[0]
+		dec_hidden = dec_hidden.view(1, batch_size, -1)
+		embedded = self.embedding(dec_input).view(1, batch_size, -1)   
+		#print(embedded.shape)
+		#context = torch.cat([enc_outputs[:, -1, :self.enc_hidden_dim], 
+		#                     enc_outputs[:, 0, self.enc_hidden_dim:]], dim=1).unsqueeze(0)
+		context = context.view(1, batch_size, -1) 
+		#print(context.shape)
+		concat = torch.cat([embedded, context], 2)
+		output, hidden = self.gru(concat, dec_hidden)
+		output = self.softmax(self.out(output[0]))  
+		return output, hidden
+    
+class CNN_RNN_EncoderDecoder(nn.Module): 
+
+	""" Encoder-Decoder without attention """
+
+	def __init__(self, encoder, decoder, decoder_token2id): 
+		super(CNN_RNN_EncoderDecoder, self).__init__() 
+		self.encoder = encoder 
+		self.decoder = decoder 
+		self.targ_vocab_size = self.decoder.targ_vocab_size
+		self.src_max_sentence_len = self.encoder.src_max_sentence_len 
+		self.targ_max_sentence_len = self.decoder.targ_max_sentence_len
+
+	def forward(self, src_idx, targ_idx, src_lens, targ_lens, teacher_forcing_ratio): 
+		
+		batch_size = src_idx.size()[0]
+		enc_outputs, enc_hidden = self.encoder(src_idx, src_lens)
+		dec_hidden = enc_hidden 
+		dec_outputs = Variable(torch.zeros(self.targ_max_sentence_len, batch_size, self.targ_vocab_size))
+		hypotheses = Variable(torch.zeros(self.targ_max_sentence_len, batch_size))
+		dec_output = targ_idx[:, 0] 
+
+		for di in range(1, self.targ_max_sentence_len): 
+			dec_output, dec_hidden = self.decoder(dec_output, dec_hidden, dec_hidden, enc_outputs)
+			dec_outputs[di] = dec_output 
+			teacher_labels = targ_idx[:, di-1] 
+			greedy_labels = dec_output.data.max(1)[1]
+			dec_output = teacher_labels if random.random() < teacher_forcing_ratio else greedy_labels 
+			hypotheses[di] = greedy_labels
+
+		attn_placeholder = Variable(torch.zeros(batch_size, self.targ_max_sentence_len, self.src_max_sentence_len))
+
+		return dec_outputs, hypotheses.transpose(0,1), attn_placeholder 
+    
